@@ -167,9 +167,30 @@ let recognition = null;
 let isListening = false;
 let alexaMode = false;
 let micPaused = false;
+let wakeDetected = false;
+let wakeResultCount = 0;
+let wakeAfterText = '';
 let silenceTimer = null;
 let lastSpeechTime = 0;
 const SILENCE_TIMEOUT = 2500; // 2.5 segundos de silencio → enviar
+const WAKE_WORD = 'asistente';
+
+// Beep cuando detecta la palabra clave (Web Audio API)
+function playBeep() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 800;
+    osc.type = 'sine';
+    gain.gain.value = 0.3;
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    osc.stop(ctx.currentTime + 0.15);
+  } catch(e) { /* silencioso si falla */ }
+}
 
 // Voice recognition init
 function initVoice() {
@@ -192,14 +213,47 @@ function initVoice() {
     }
     inputEl.value = transcript;
     let vs = document.getElementById('voice-status');
-    vs.textContent = transcript || (alexaMode ? 'Te escucho...' : 'Escuchando...');
-    vs.className = alexaMode ? 'alexa' : 'active';
 
-    // En modo Alexa: reiniciar timer de silencio
-    if (alexaMode && transcript.trim()) {
-      lastSpeechTime = Date.now();
-      resetSilenceTimer();
+    if (alexaMode) {
+      if (!wakeDetected) {
+        // Buscar palabra clave en el texto
+        let lower = transcript.toLowerCase();
+        let idx = lower.indexOf(WAKE_WORD);
+        if (idx !== -1) {
+          // ¡Palabra clave detectada!
+          wakeDetected = true;
+          wakeResultCount = e.results.length;
+          wakeAfterText = transcript.substring(idx + WAKE_WORD.length).trim();
+          playBeep();
+          inputEl.value = wakeAfterText;
+          vs.textContent = wakeAfterText || 'Te escucho...';
+          vs.className = 'alexa';
+          lastSpeechTime = Date.now();
+          if (wakeAfterText) resetSilenceTimer();
+        } else {
+          vs.textContent = 'Di "' + WAKE_WORD + '"...';
+          vs.className = 'alexa';
+        }
+        return;
+      }
+      // Wake word ya detectado: mostrar solo texto nuevo
+      let newText = wakeAfterText;
+      for (let i = wakeResultCount; i < e.results.length; i++) {
+        newText += e.results[i][0].transcript;
+      }
+      inputEl.value = newText;
+      vs.textContent = newText || 'Te escucho...';
+      vs.className = 'alexa';
+      if (newText.trim()) {
+        lastSpeechTime = Date.now();
+        resetSilenceTimer();
+      }
+      return;
     }
+
+    // Push-to-talk mode
+    vs.textContent = transcript || 'Escuchando...';
+    vs.className = 'active';
   };
 
   recognition.onerror = function(e) {
@@ -280,8 +334,11 @@ function pauseAlexaMic() {
 
 function resumeAlexaMic() {
   micPaused = false;
+  wakeDetected = false;
+  wakeAfterText = '';
+  if (silenceTimer) clearTimeout(silenceTimer);
   if (alexaMode) {
-    document.getElementById('voice-status').textContent = 'Te escucho...';
+    document.getElementById('voice-status').textContent = 'Di "' + WAKE_WORD + '"...';
     document.getElementById('voice-status').className = 'alexa';
     try { recognition.start(); } catch(e) {}
   }
@@ -306,18 +363,20 @@ function toggleMic() {
 function startAlexaMode() {
   alexaMode = true;
   isListening = false;
+  wakeDetected = false;
   let micBtn = document.getElementById('mic-btn');
   micBtn.classList.add('alexa-mode');
   micBtn.innerHTML = '🔵';
-  micBtn.title = 'Modo Alexa activo. Toca para apagar.';
-  document.getElementById('voice-status').textContent = 'Te escucho... Habla cuando quieras';
+  micBtn.title = 'Modo Alexa activo. Di "' + WAKE_WORD + '" para activar. Toca para apagar.';
+  document.getElementById('voice-status').textContent = 'Di "' + WAKE_WORD + '"...';
   document.getElementById('voice-status').className = 'alexa';
-  inputEl.placeholder = 'Habla, te escucho...';
+  inputEl.placeholder = 'Di "' + WAKE_WORD + '"...';
   try { recognition.start(); } catch(e) {}
 }
 
 function stopAlexaMode() {
   alexaMode = false;
+  wakeDetected = false;
   if (silenceTimer) clearTimeout(silenceTimer);
   let micBtn = document.getElementById('mic-btn');
   micBtn.classList.remove('alexa-mode');
