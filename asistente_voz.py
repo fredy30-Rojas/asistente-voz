@@ -486,7 +486,6 @@ def main():
                         ia_pensando = False  # destrabar si la IA estaba pensando
                     elif action == "cancelar_silent":
                         ia_pensando = False  # destrabar si la IA estaba pensando
-                        pass  # no decir nada si no habia TTS activo
                     elif action == "ayuda":
                         tts.hablar_en_hilo(response)
                     elif action == "ia":
@@ -497,18 +496,19 @@ def main():
 
                         def ia_worker(pregunta):
                             nonlocal ia_pensando
-                            respuesta = preguntar(pregunta)
-                            # Verificar si el usuario cancelo mientras pensaba
-                            if tts.stop_requested:
-                                print("  IA cancelada por el usuario")
+                            try:
+                                respuesta = preguntar(pregunta)
+                                # Verificar si el usuario cancelo mientras pensaba
+                                if tts.stop_requested:
+                                    print("  IA cancelada por el usuario")
+                                    return
+                                if respuesta is None:
+                                    respuesta = "Lo siento, no pude consultar la inteligencia artificial. Verifica tu conexion a internet."
+                                tts.last_response = respuesta
+                                print(f"IA: {respuesta}")
+                                tts.hablar_en_hilo(respuesta)
+                            finally:
                                 ia_pensando = False
-                                return
-                            if respuesta is None:
-                                respuesta = "Lo siento, no pude consultar la inteligencia artificial. Verifica tu conexion a internet."
-                            tts.last_response = respuesta
-                            print(f"IA: {respuesta}")
-                            ia_pensando = False
-                            tts.hablar_en_hilo(respuesta)
 
                         threading.Thread(target=ia_worker, args=(text,), daemon=True).start()
                     else:
