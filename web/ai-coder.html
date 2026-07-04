@@ -384,7 +384,6 @@ function resumeAlexaMic() {
   if (silenceTimer) clearTimeout(silenceTimer);
   if (followUpTimer) clearTimeout(followUpTimer);
   if (alexaMode) {
-    playEndChime();
     document.getElementById('voice-status').textContent = 'Di "' + WAKE_WORD + '"...';
     document.getElementById('voice-status').className = 'alexa';
     try { recognition.start(); } catch(e) {}
