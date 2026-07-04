@@ -28,14 +28,6 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK 36
-        run: |
-          SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          echo "Installing Android SDK 36..."
-          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;36.0.0" || \
-          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" || \
-          echo "SDK 36 install attempted (may already be present)"
-
       - name: Install npm dependencies
         working-directory: ai-coder-native
         run: npm ci
@@ -50,10 +42,6 @@ jobs:
       - name: Sync Capacitor
         working-directory: ai-coder-native
         run: npx cap sync
-
-      - name: Create local.properties
-        run: |
-          echo "sdk.dir=${ANDROID_SDK_ROOT:-$ANDROID_HOME}" > ai-coder-native/android/local.properties
 
       - name: Build debug APK
         working-directory: ai-coder-native/android
