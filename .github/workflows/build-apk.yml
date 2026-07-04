@@ -51,25 +51,41 @@ jobs:
           cp capacitor.config.json android/app/src/main/assets/
 
       - name: Build debug APK
+        id: build
         working-directory: ai-coder-native/android
         run: |
           echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > local.properties
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee ../gradle-output.txt
+          echo "GRADLE_EXIT=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
-      - name: Explore build output
+      - name: Explore build directory
         if: always()
         run: |
-          echo "=== Build output structure ==="
-          find ai-coder-native/android/app/build/outputs -type f 2>/dev/null || echo "No build outputs"
-          echo "=== Searching for APK files ==="
-          find . -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+          echo "=== Directory tree of build outputs ==="
+          find ai-coder-native/android -name "build" -type d | while read dir; do
+            echo "--- $dir ---"
+            find "$dir" -type f 2>/dev/null | head -50
+          done
+          echo "=== Searching for APK files anywhere ==="
+          find . -name "*.apk" -type f 2>/dev/null || echo "NO APK FILES FOUND"
+
+      - name: Upload Gradle output (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-output
+          path: ai-coder-native/gradle-output.txt
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Upload APK artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ai-coder-debug-apk
-          path: ai-coder-native/android/app/build/outputs/apk/debug/*.apk
+          path: |
+            ai-coder-native/android/app/build/outputs/apk/debug/*.apk
+            ai-coder-native/android/app/build/outputs/apk/**/*.apk
           retention-days: 30
           if-no-files-found: warn
