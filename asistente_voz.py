@@ -516,7 +516,7 @@ def main():
                         print(f"Respuesta: {response}")
                         tts.hablar_en_hilo(response)
 
-                elif WAKE_WORD in text:
+                elif WAKE_WORD in text.split():
                     print("Despertado.")
                     # Drenar cola y resetear recognizer
                     while not q.empty():
@@ -529,7 +529,7 @@ def main():
                     # audio capturado durante el beep sea ignorado
                     listening_for_command = True
                     wake_time = time.time()
-                    tts_thread = tts.hablar_en_hilo("Dime")
+                    tts.hablar_en_hilo("Dime")
                     time.sleep(0.05)  # dar tiempo al hilo de activar speaking
                     beep_wake()
 
