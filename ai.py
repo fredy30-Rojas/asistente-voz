@@ -64,7 +64,8 @@ def _call_api(url: str, api_key: str, model: str, question: str) -> str | None:
         data=payload,
         headers={
             "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "asistente-voz/1.0"
         },
         method="POST"
     )
