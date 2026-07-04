@@ -30,6 +30,8 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36 build-tools;36.0.0 platforms;android-34 build-tools;34.0.0'
 
       - name: Install npm dependencies
         run: npm ci
@@ -42,6 +44,11 @@ jobs:
 
       - name: Sync Capacitor (copy web assets to Android)
         run: npx cap sync
+
+      - name: Create local.properties
+        working-directory: ai-coder-native/android
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
       - name: Build debug APK
         working-directory: ai-coder-native/android
