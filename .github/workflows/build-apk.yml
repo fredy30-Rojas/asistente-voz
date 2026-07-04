@@ -28,7 +28,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          target: '35'
+          target: '36'
 
       - name: Install npm dependencies
         working-directory: ai-coder-native
