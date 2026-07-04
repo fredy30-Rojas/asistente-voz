@@ -168,28 +168,65 @@ let isListening = false;
 let alexaMode = false;
 let micPaused = false;
 let wakeDetected = false;
+let followUpMode = false;
 let wakeResultCount = 0;
 let wakeAfterText = '';
 let silenceTimer = null;
+let followUpTimer = null;
 let lastSpeechTime = 0;
-const SILENCE_TIMEOUT = 2500; // 2.5 segundos de silencio → enviar
+const SILENCE_TIMEOUT = 2500; // 2.5s silencio → enviar
+const FOLLOW_UP_TIMEOUT = 8000; // 8s para seguir conversando sin wake word
 const WAKE_WORD = 'asistente';
 
-// Beep cuando detecta la palabra clave (Web Audio API)
+// Sonido de inicio (como Alexa al encender) - tono ascendente
+function playStartChime() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var now = ctx.currentTime;
+    [600, 900].forEach(function(freq, i) {
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = freq; osc.type = 'sine';
+      gain.gain.setValueAtTime(0, now + i * 0.12);
+      gain.gain.linearRampToValueAtTime(0.25, now + i * 0.12 + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.2);
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.25);
+    });
+  } catch(e) {}
+}
+
+// Beep cuando detecta la palabra clave
 function playBeep() {
   try {
     var ctx = new (window.AudioContext || window.webkitAudioContext)();
     var osc = ctx.createOscillator();
     var gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 800;
-    osc.type = 'sine';
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 800; osc.type = 'sine';
     gain.gain.value = 0.3;
     osc.start();
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
     osc.stop(ctx.currentTime + 0.15);
-  } catch(e) { /* silencioso si falla */ }
+  } catch(e) {}
+}
+
+// Sonido sutil al terminar de responder (como Alexa)
+function playEndChime() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var now = ctx.currentTime;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(700, now);
+    osc.frequency.linearRampToValueAtTime(400, now + 0.2);
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.start(now); osc.stop(now + 0.3);
+  } catch(e) {}
 }
 
 // Voice recognition init
@@ -215,12 +252,11 @@ function initVoice() {
     let vs = document.getElementById('voice-status');
 
     if (alexaMode) {
-      if (!wakeDetected) {
+      if (!wakeDetected && !followUpMode) {
         // Buscar palabra clave en el texto
-        let lower = transcript.toLowerCase();
-        let idx = lower.indexOf(WAKE_WORD);
+        var lower = transcript.toLowerCase();
+        var idx = lower.indexOf(WAKE_WORD);
         if (idx !== -1) {
-          // ¡Palabra clave detectada!
           wakeDetected = true;
           wakeResultCount = e.results.length;
           wakeAfterText = transcript.substring(idx + WAKE_WORD.length).trim();
@@ -236,15 +272,25 @@ function initVoice() {
         }
         return;
       }
-      // Wake word ya detectado: mostrar solo texto nuevo
-      let newText = wakeAfterText;
-      for (let i = wakeResultCount; i < e.results.length; i++) {
+      // Wake word detectado o en follow-up: mostrar solo texto nuevo
+      var newText = wakeAfterText;
+      for (var i = wakeResultCount; i < e.results.length; i++) {
         newText += e.results[i][0].transcript;
       }
       inputEl.value = newText;
       vs.textContent = newText || 'Te escucho...';
       vs.className = 'alexa';
       if (newText.trim()) {
+        // En follow-up: reiniciar timer de 8s
+        if (followUpMode && followUpTimer) {
+          clearTimeout(followUpTimer);
+          followUpTimer = setTimeout(function() {
+            if (followUpMode && alexaMode) {
+              pauseAlexaMic();
+              setTimeout(function() { resumeAlexaMic(); }, 200);
+            }
+          }, FOLLOW_UP_TIMEOUT);
+        }
         lastSpeechTime = Date.now();
         resetSilenceTimer();
       }
@@ -314,16 +360,14 @@ function resetSilenceTimer() {
 }
 
 function waitForTtsThenResume() {
-  // Si no está hablando ya, reactivar inmediatamente
-  if (!speaking) { resumeAlexaMic(); return; }
-  let check = setInterval(function() {
+  if (!speaking) { startFollowUpMode(); return; }
+  var check = setInterval(function() {
     if (!speaking) {
       clearInterval(check);
-      resumeAlexaMic();
+      startFollowUpMode();
     }
   }, 300);
-  // Timeout de seguridad: 30s max
-  setTimeout(function() { clearInterval(check); if (micPaused) resumeAlexaMic(); }, 30000);
+  setTimeout(function() { clearInterval(check); if (micPaused) startFollowUpMode(); }, 30000);
 }
 
 function pauseAlexaMic() {
@@ -335,11 +379,38 @@ function pauseAlexaMic() {
 function resumeAlexaMic() {
   micPaused = false;
   wakeDetected = false;
+  followUpMode = false;
   wakeAfterText = '';
   if (silenceTimer) clearTimeout(silenceTimer);
+  if (followUpTimer) clearTimeout(followUpTimer);
   if (alexaMode) {
+    playEndChime();
     document.getElementById('voice-status').textContent = 'Di "' + WAKE_WORD + '"...';
     document.getElementById('voice-status').className = 'alexa';
+    try { recognition.start(); } catch(e) {}
+  }
+}
+
+// Modo conversacion: seguir escuchando 8s sin wake word (como Alexa)
+function startFollowUpMode() {
+  micPaused = false;
+  wakeDetected = true; // No necesita wake word en follow-up
+  followUpMode = true;
+  wakeAfterText = '';
+  wakeResultCount = 0;
+  if (silenceTimer) clearTimeout(silenceTimer);
+  if (followUpTimer) clearTimeout(followUpTimer);
+  playEndChime();
+  if (alexaMode) {
+    document.getElementById('voice-status').textContent = 'Te escucho...';
+    document.getElementById('voice-status').className = 'alexa';
+    // Si el usuario no habla en 8s, volver a esperar wake word
+    followUpTimer = setTimeout(function() {
+      if (followUpMode && alexaMode) {
+        pauseAlexaMic();
+        setTimeout(function() { resumeAlexaMic(); }, 200);
+      }
+    }, FOLLOW_UP_TIMEOUT);
     try { recognition.start(); } catch(e) {}
   }
 }
@@ -364,20 +435,25 @@ function startAlexaMode() {
   alexaMode = true;
   isListening = false;
   wakeDetected = false;
-  let micBtn = document.getElementById('mic-btn');
+  followUpMode = false;
+  if (followUpTimer) clearTimeout(followUpTimer);
+  var micBtn = document.getElementById('mic-btn');
   micBtn.classList.add('alexa-mode');
   micBtn.innerHTML = '🔵';
-  micBtn.title = 'Modo Alexa activo. Di "' + WAKE_WORD + '" para activar. Toca para apagar.';
+  micBtn.title = 'Modo Alexa activo. Di "' + WAKE_WORD + '" para activar.';
   document.getElementById('voice-status').textContent = 'Di "' + WAKE_WORD + '"...';
   document.getElementById('voice-status').className = 'alexa';
   inputEl.placeholder = 'Di "' + WAKE_WORD + '"...';
   try { recognition.start(); } catch(e) {}
+  setTimeout(function() { playStartChime(); }, 400);
 }
 
 function stopAlexaMode() {
   alexaMode = false;
   wakeDetected = false;
+  followUpMode = false;
   if (silenceTimer) clearTimeout(silenceTimer);
+  if (followUpTimer) clearTimeout(followUpTimer);
   let micBtn = document.getElementById('mic-btn');
   micBtn.classList.remove('alexa-mode');
   micBtn.innerHTML = '🎤';
