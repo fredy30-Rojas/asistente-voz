@@ -352,10 +352,18 @@ function initVoice() {
       vs.textContent = 'No te escuché. Intenta de nuevo.';
     } else if (e.error === 'audio-capture') {
       vs.textContent = 'Sin micrófono. Revisa permisos.';
-      if (alexaMode) stopAlexaMode();
+      if (alexaMode) {
+        stopAlexaMode();
+        playErrorChime();
+        sendText('No tengo acceso al microfono. Revisa los permisos de la aplicacion.');
+      }
     } else if (e.error === 'not-allowed') {
       vs.textContent = 'Permiso de micrófono denegado.';
-      if (alexaMode) stopAlexaMode();
+      if (alexaMode) {
+        stopAlexaMode();
+        playErrorChime();
+        sendText('Permiso de microfono denegado. Concede el permiso en ajustes.');
+      }
     } else if (e.error === 'aborted') {
       return;
     } else {
@@ -411,9 +419,12 @@ function waitForTtsThenResume() {
 
 function sendText(textToSay) {
   if ('speechSynthesis' in window) {
+    speaking = true;
+    window.speechSynthesis.cancel();
     var u = new SpeechSynthesisUtterance(textToSay);
     u.lang = 'es-ES'; u.rate = 1.2;
-    window.speechSynthesis.cancel();
+    u.onend = function() { speaking = false; };
+    u.onerror = function() { speaking = false; };
     window.speechSynthesis.speak(u);
   }
 }
