@@ -143,8 +143,10 @@
     <h2>Configurar AI Coder</h2>
     <label for="api-key">API Key (Cerebras o Groq)</label>
     <input type="password" id="api-key" placeholder="csk_... o gsk_..." aria-label="API Key">
+    <label for="device-ip">IP del controlador IR (ESP32)</label>
+    <input type="text" id="device-ip" placeholder="192.168.1.100" aria-label="IP del ESP32">
     <button onclick="saveConfig()">Guardar</button>
-    <p class="note">Tu key se guarda solo aquí. Gratis, sin tarjeta.<br>Consíguela en cloud.cerebras.ai</p>
+    <p class="note">Controla TV, AC y mas con comandos de voz.<br>Requiere ESP32 con LED infrarrojo en tu red WiFi.</p>
   </div>
 </div>
 
@@ -174,9 +176,10 @@ let wakeAfterText = '';
 let silenceTimer = null;
 let followUpTimer = null;
 let lastSpeechTime = 0;
-const SILENCE_TIMEOUT = 2500; // 2.5s silencio → enviar
-const FOLLOW_UP_TIMEOUT = 8000; // 8s para seguir conversando sin wake word
+const SILENCE_TIMEOUT = 2500;
+const FOLLOW_UP_TIMEOUT = 8000;
 const WAKE_WORD = 'asistente';
+let deviceServer = localStorage.getItem('device_server') || 'http://192.168.1.100';
 
 // AudioContext compartido para evitar el limite de ~6 instancias
 var audioCtx = null;
@@ -573,6 +576,7 @@ speak = function(text) {
 // Init
 initVoice();
 document.getElementById('api-key').value = localStorage.getItem('groq_api_key') || '';
+document.getElementById('device-ip').value = (localStorage.getItem('device_server') || 'http://192.168.1.100').replace('http://', '');
 if (localStorage.getItem('groq_api_key')) {
   configOverlay.style.display = 'none';
   loadHistory();
@@ -600,9 +604,10 @@ function saveConfig() {
   apiKey = document.getElementById('api-key').value.trim();
   if (!apiKey) { alert('Pega tu API key'); return; }
   localStorage.setItem('groq_api_key', apiKey);
+  var ip = document.getElementById('device-ip').value.trim();
+  if (ip) { localStorage.setItem('device_server', 'http://' + ip); deviceServer = 'http://' + ip; }
   configOverlay.style.display = 'none';
-  addMessage('assistant', 'AI Coder listo. Di "asistente" y hare lo que necesites.');
-  // Activar modo Alexa automaticamente
+  addMessage('assistant', 'AI Coder listo. Puedes decir "enciende la tele" o "sube el volumen".');
   setTimeout(function() { startAlexaMode(); }, 500);
 }
 
@@ -628,6 +633,31 @@ function saveHistory() {
   localStorage.setItem('groq_chat_history', JSON.stringify(messages));
 }
 
+// Enviar comando HTTP al servidor de dispositivos (ESP32 IR blaster)
+function sendDeviceCommand(device, action, value) {
+  var url = deviceServer + '/device?d=' + encodeURIComponent(device) + '&a=' + encodeURIComponent(action) + '&v=' + encodeURIComponent(value || '');
+  statusEl.textContent = 'Enviando: ' + device + ' ' + action + '...';
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url, true);
+  xhr.timeout = 5000;
+  xhr.onload = function() {
+    statusEl.textContent = 'Hecho: ' + device + ' ' + action;
+    playBeep();
+  };
+  xhr.onerror = function() {
+    statusEl.textContent = 'Dispositivo no disponible';
+    playErrorChime();
+    if (alexaMode) sendText('No pude comunicarme con el dispositivo. Revisa que este encendido y conectado a la red.');
+  };
+  xhr.ontimeout = function() {
+    statusEl.textContent = 'Sin respuesta del dispositivo';
+    playErrorChime();
+    if (alexaMode) sendText('El dispositivo no responde. Verifica la conexion.');
+  };
+  xhr.send();
+}
+
+// Agregar configuracion del servidor de dispositivos
 function addMessage(role, content) {
   let msg = { role: role, content: content };
   messages.push(msg);
@@ -710,7 +740,7 @@ async function send() {
   let apiConfig = getApiConfig();
   let apiMessages = [{
     role: 'system',
-    content: 'Eres un asistente de voz. Responde en español, de forma clara, concisa y hablada. Máximo 3 oraciones. Lenguaje natural, cálido. Sin markdown ni código largo.'
+    content: 'Eres un asistente de voz inteligente. Responde en español, claro y conciso, maximo 3 oraciones. PUEDES CONTROLAR DISPOSITIVOS: TV, aire acondicionado, equipo de sonido, luces. Cuando el usuario pida controlar un dispositivo, incluye al INICIO de tu respuesta un comando en formato [CMD:dispositivo:accion:valor]. Ejemplos: [CMD:tv:power:on] [CMD:tv:volume:15] [CMD:ac:temp:22] [CMD:tv:channel:5] [CMD:sound:power:off]. Luego escribe tu respuesta normal. El comando [CMD] NO sera visible para el usuario.'
   }];
 
   let recentMessages = messages.slice(-20);
@@ -746,9 +776,18 @@ async function send() {
       if (alexaMode) { playErrorChime(); sendText('Error de la IA: ' + data.error.message); }
     } else if (data.choices && data.choices[0]) {
       var reply = data.choices[0].message.content;
-      addMessage('assistant', reply);
+      // Buscar y ejecutar TODOS los comandos [CMD:...]
+      var cmdRegex = /\[CMD:([^\]]+)\]/g;
+      var cmdMatch;
+      while ((cmdMatch = cmdRegex.exec(reply)) !== null) {
+        var parts = cmdMatch[1].split(':');
+        sendDeviceCommand(parts[0], parts[1], parts[2] || '');
+      }
+      var cleanReply = reply.replace(/\[CMD:[^\]]+\]\s*/g, '').trim();
+      if (!cleanReply) cleanReply = 'Listo, comando enviado.';
+      addMessage('assistant', cleanReply);
       statusEl.textContent = 'Listo';
-      if (autoSpeak) speak(reply);
+      if (autoSpeak) speak(cleanReply);
     } else {
       addMessage('assistant', 'No obtuve respuesta. ¿Key correcta?');
       statusEl.textContent = 'Sin respuesta';
