@@ -33,12 +33,25 @@ set CEREBRAS_API_KEY=csk_...
 
 Sin API keys, el asistente solo repite lo que dices (modo eco).
 
-## Uso
+## Instalación rápida (Windows)
+
+```bash
+instalar.bat
+```
+
+Esto instala dependencias, descarga el modelo y configura todo automáticamente.
+
+## Uso diario
+
+```bash
+asistente.bat
+```
+
+O manualmente:
 
 ```bash
 python asistente_voz.py
-# o con transcripción parcial visible:
-python asistente_voz.py --verbose
+python asistente_voz.py --verbose   # con transcripción parcial
 ```
 
 La primera ejecución descarga automáticamente el modelo Vosk español (39 MB).

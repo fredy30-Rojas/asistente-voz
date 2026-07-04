@@ -38,6 +38,7 @@ COMMAND_TIMEOUT = 8       # segundos antes de cancelar escucha de comando
 COOLDOWN_MS = 700         # ms de silencio post-TTS para evitar auto-trigger
 
 VERBOSE = "--verbose" in sys.argv
+DOWNLOAD_ONLY = "--download-only" in sys.argv  # solo descargar modelo y salir
 
 
 # ==================== BEEP ACCESIBILIDAD ====================
@@ -359,6 +360,11 @@ def main():
 
     # Descargar modelo si es necesario
     download_model()
+
+    # Modo --download-only: salir tras descargar modelo
+    if DOWNLOAD_ONLY:
+        print("Modelo descargado. Ejecuta sin --download-only para usar el asistente.")
+        return
 
     # Cargar modelo Vosk
     print("Cargando modelo...")
