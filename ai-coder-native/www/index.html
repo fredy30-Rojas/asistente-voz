@@ -123,7 +123,7 @@
 </head>
 <body>
 
-<div id="chat" aria-live="polite" aria-label="Conversación"></div>
+<div id="chat" aria-label="Conversación"></div>
 
 <div id="input-area">
   <textarea id="user-input" placeholder="Escribe o habla tu pregunta..." aria-label="Escribe o habla tu pregunta"></textarea>
@@ -178,10 +178,22 @@ const SILENCE_TIMEOUT = 2500; // 2.5s silencio → enviar
 const FOLLOW_UP_TIMEOUT = 8000; // 8s para seguir conversando sin wake word
 const WAKE_WORD = 'asistente';
 
+// AudioContext compartido para evitar el limite de ~6 instancias
+var audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx || audioCtx.state === 'closed') {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  return audioCtx;
+}
+
 // Sonido de inicio (como Alexa al encender) - tono ascendente
 function playStartChime() {
   try {
-    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var ctx = getAudioCtx();
     var now = ctx.currentTime;
     [600, 900].forEach(function(freq, i) {
       var osc = ctx.createOscillator();
@@ -200,7 +212,7 @@ function playStartChime() {
 // Beep cuando detecta la palabra clave
 function playBeep() {
   try {
-    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var ctx = getAudioCtx();
     var osc = ctx.createOscillator();
     var gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
@@ -212,10 +224,28 @@ function playBeep() {
   } catch(e) {}
 }
 
+// Sonido de error (tono bajo, para cuando algo falla)
+function playErrorChime() {
+  try {
+    var ctx = getAudioCtx();
+    var now = ctx.currentTime;
+    [300, 200].forEach(function(freq, i) {
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = freq; osc.type = 'square';
+      gain.gain.setValueAtTime(0.15, now + i * 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.15 + 0.2);
+      osc.start(now + i * 0.15);
+      osc.stop(now + i * 0.15 + 0.25);
+    });
+  } catch(e) {}
+}
+
 // Sonido sutil al terminar de responder (como Alexa)
 function playEndChime() {
   try {
-    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var ctx = getAudioCtx();
     var now = ctx.currentTime;
     var osc = ctx.createOscillator();
     var gain = ctx.createGain();
@@ -257,15 +287,24 @@ function initVoice() {
         var lower = transcript.toLowerCase();
         var idx = lower.indexOf(WAKE_WORD);
         if (idx !== -1) {
+          // ¡Palabra clave detectada! Reiniciar reconocimiento para texto limpio
           wakeDetected = true;
-          wakeResultCount = e.results.length;
-          wakeAfterText = transcript.substring(idx + WAKE_WORD.length).trim();
+          var afterWake = transcript.substring(idx + WAKE_WORD.length).trim();
           playBeep();
-          inputEl.value = wakeAfterText;
-          vs.textContent = wakeAfterText || 'Te escucho...';
+          inputEl.value = afterWake;
+          vs.textContent = afterWake || 'Te escucho...';
           vs.className = 'alexa';
           lastSpeechTime = Date.now();
-          if (wakeAfterText) resetSilenceTimer();
+          // Reiniciar sesion de reconocimiento para evitar resultados sucios
+          try { recognition.stop(); } catch(ex) {}
+          setTimeout(function() {
+            if (alexaMode && wakeDetected) {
+              wakeResultCount = 0;
+              wakeAfterText = afterWake;
+              try { recognition.start(); } catch(ex) {}
+            }
+          }, 100);
+          if (afterWake) resetSilenceTimer();
         } else {
           vs.textContent = 'Di "' + WAKE_WORD + '"...';
           vs.className = 'alexa';
@@ -367,11 +406,21 @@ function waitForTtsThenResume() {
       startFollowUpMode();
     }
   }, 300);
-  setTimeout(function() { clearInterval(check); if (micPaused) startFollowUpMode(); }, 30000);
+  setTimeout(function() { clearInterval(check); if (micPaused) startFollowUpMode(); }, 10000);
+}
+
+function sendText(textToSay) {
+  if ('speechSynthesis' in window) {
+    var u = new SpeechSynthesisUtterance(textToSay);
+    u.lang = 'es-ES'; u.rate = 1.2;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  }
 }
 
 function pauseAlexaMic() {
   if (silenceTimer) clearTimeout(silenceTimer);
+  if (followUpTimer) clearTimeout(followUpTimer);
   micPaused = true;
   try { recognition.stop(); } catch(e) {}
 }
@@ -683,18 +732,24 @@ async function send() {
     if (data.error) {
       addMessage('assistant', 'Error: ' + data.error.message);
       statusEl.textContent = 'Error';
+      if (alexaMode) { playErrorChime(); sendText('Error de la IA: ' + data.error.message); }
     } else if (data.choices && data.choices[0]) {
-      let reply = data.choices[0].message.content;
+      var reply = data.choices[0].message.content;
       addMessage('assistant', reply);
       statusEl.textContent = 'Listo';
       if (autoSpeak) speak(reply);
     } else {
       addMessage('assistant', 'No obtuve respuesta. ¿Key correcta?');
       statusEl.textContent = 'Sin respuesta';
+      if (alexaMode) { playErrorChime(); sendText('No obtuve respuesta. Revisa tu clave de API.'); }
     }
   } catch(e) {
-    addMessage('assistant', 'Error de conexión. ¿Tienes internet?');
+    addMessage('assistant', 'Error de conexion. ¿Tienes internet?');
     statusEl.textContent = 'Error';
+    if (alexaMode) {
+      playErrorChime();
+      sendText('Error de conexion. Revisa tu internet.');
+    }
   }
 }
 
