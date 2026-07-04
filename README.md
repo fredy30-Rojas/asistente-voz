@@ -12,14 +12,14 @@ Colección de herramientas de voz, TTS e IA para Windows. Diseñado para accesib
 ├── tts/                      # Herramientas de texto a voz
 │   ├── hablar.py             # TTS standalone por línea de comandos
 │   ├── tts_mcp.py            # Servidor MCP TTS para Claude Desktop
-│   └── servidor.py           # Servidor Flask TTS HTTP
+│   ├── servidor.py           # Servidor Flask TTS HTTP
+│   └── CLAUDE.md             # Instrucciones para Claude Desktop
 ├── utilidades/               # Utilidades varias
 │   ├── clipboard.py          # Monitor de portapapeles a voz
 │   └── crear_vm_oracle.py    # Creador de VM gratuita en Oracle Cloud
 └── web/                      # Interfaces web
     ├── groq-coder.html       # Chat de IA para programar (con TTS)
-    ├── groq-coder-launcher.ps1
-    └── CLAUDE.md             # Instrucciones para Claude Desktop
+    └── groq-coder-launcher.ps1
 ```
 
 ## 🎤 Asistente de Voz Principal
@@ -36,6 +36,12 @@ Colección de herramientas de voz, TTS e IA para Windows. Diseñado para accesib
 - **Modo silencioso** por defecto (sin spam para lectores de pantalla)
 
 ### Requisitos
+
+```bash
+pip install -r requirements.txt
+```
+
+O instalar dependencias mínimas para el asistente:
 
 ```bash
 pip install vosk sounddevice edge_tts
@@ -84,6 +90,7 @@ Di **"asistente"** → beep doble → di tu comando.
 | `hablar.py` | `python hablar.py "Texto a hablar"` |
 | `servidor.py` | Servidor Flask en puerto 5500, endpoint `POST /hablar` |
 | `tts_mcp.py` | Servidor MCP para integrar TTS en Claude Desktop |
+| `CLAUDE.md` | Instrucciones para Claude Desktop con TTS |
 
 ## 🛠️ Utilidades (`utilidades/`)
 
@@ -97,7 +104,6 @@ Di **"asistente"** → beep doble → di tu comando.
 | Herramienta | Descripción |
 |-------------|-------------|
 | `groq-coder.html` | Chat web de IA para programar, con TTS integrado |
-| `CLAUDE.md` | Configuración de TTS para Claude Desktop |
 
 ## Licencia
 

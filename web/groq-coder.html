@@ -99,7 +99,7 @@
 </div>
 
 <script>
-const GROQ_URL = 'https://api.cerebras.ai/v1/chat/completions';
+const API_URL = 'https://api.cerebras.ai/v1/chat/completions';
 const MODEL = 'gpt-oss-120b';
 
 let apiKey = localStorage.getItem('groq_api_key') || '';
@@ -256,7 +256,7 @@ async function send() {
 
   try {
     let xhr = new XMLHttpRequest();
-    xhr.open('POST', GROQ_URL, true);
+    xhr.open('POST', API_URL, true);
     xhr.setRequestHeader('Authorization', 'Bearer ' + apiKey);
     xhr.setRequestHeader('Content-Type', 'application/json');
 

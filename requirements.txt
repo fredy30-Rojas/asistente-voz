@@ -1,0 +1,19 @@
+# Asistente de voz principal
+vosk
+sounddevice>=0.4.6
+edge_tts>=6.1.0
+
+# Módulo IA (ai.py)
+# Sin dependencias adicionales - usa urllib estándar
+
+# TTS tools (tts/)
+soundfile>=0.12.0
+fastmcp>=0.1.0
+
+# Servidor TTS (tts/servidor.py)
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Utilidades
+pyperclip>=1.8.0        # utilidades/clipboard.py
+oci>=2.126.0            # utilidades/crear_vm_oracle.py

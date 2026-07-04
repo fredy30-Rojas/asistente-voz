@@ -8,8 +8,8 @@ import sys
 import os
 
 # Configuración
-COMPARTMENT_ID = "ocid1.tenancy.oc1..aaaaaaaayzrkgu5uhhg2gjgpfuud7rnzijdcm3mhxr24zukrb3yr3o55bzba"
-SSH_PUBLIC_KEY = """ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEHNL5aqPiZXPlnXDRiZi5+DM51km5mEO3GmrvrPSn0H fredy_30@hotmail.com"""
+COMPARTMENT_ID = os.environ.get("OCI_COMPARTMENT_ID", "")
+SSH_PUBLIC_KEY = os.environ.get("OCI_SSH_PUBLIC_KEY", "")
 
 # Imagen: Canonical Ubuntu 22.04 ARM (aarch64)
 UBUNTU_IMAGE_OCID = "ocid1.image.oc1.eu-madrid-1.aaaaaaaa7rcvdaff45ybwthn46rkimr42mvzrdyfssah5rtwommnlnruna5q"
