@@ -97,19 +97,28 @@
     -webkit-tap-highlight-color: transparent; padding: 0;
   }
   #mic-btn:active { background: #3a3a5e; }
-  #mic-btn.listening {
+  #mic-btn.push-talk {
     background: #ff3333; color: #fff; border-color: #ff3333;
-    animation: pulse 1.5s infinite;
+    animation: pulse-red 1.5s infinite;
   }
-  @keyframes pulse {
+  #mic-btn.alexa-mode {
+    background: #0066ff; color: #fff; border-color: #0066ff;
+    animation: pulse-blue 2s infinite;
+  }
+  @keyframes pulse-red {
     0%, 100% { box-shadow: 0 0 0 0 rgba(255,51,51,0.5); }
     50% { box-shadow: 0 0 0 12px rgba(255,51,51,0); }
+  }
+  @keyframes pulse-blue {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0,102,255,0.4); }
+    50% { box-shadow: 0 0 0 14px rgba(0,102,255,0); }
   }
   #voice-status {
     flex: 1; font-size: 14px; color: #888;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   #voice-status.active { color: #ff6666; }
+  #voice-status.alexa { color: #66aaff; }
 </style>
 </head>
 <body>
@@ -119,8 +128,8 @@
 <div id="input-area">
   <textarea id="user-input" placeholder="Escribe o habla tu pregunta..." aria-label="Escribe o habla tu pregunta"></textarea>
   <div id="voice-bar">
-    <button id="mic-btn" onclick="toggleMic()" title="Mantén presionado para hablar" aria-label="Presiona para hablar">🎤</button>
-    <span id="voice-status">Toca el 🎤 para hablar</span>
+    <button id="mic-btn" onclick="toggleMic()" title="Ciclar: Apagado → Pulsar para hablar → Alexa (siempre activo)" aria-label="Presiona para hablar">🎤</button>
+    <span id="voice-status">Toca el 🎤: 1=Pulsar 2=Alexa</span>
   </div>
   <div id="button-row">
     <button id="send-btn" onclick="send()">Enviar</button>
@@ -156,6 +165,11 @@ let speaking = false;
 let autoSpeak = true;
 let recognition = null;
 let isListening = false;
+let alexaMode = false;
+let micPaused = false;
+let silenceTimer = null;
+let lastSpeechTime = 0;
+const SILENCE_TIMEOUT = 2500; // 2.5 segundos de silencio → enviar
 
 // Voice recognition init
 function initVoice() {
@@ -178,50 +192,150 @@ function initVoice() {
     }
     inputEl.value = transcript;
     let vs = document.getElementById('voice-status');
-    vs.textContent = transcript || 'Escuchando...';
-    vs.className = 'active';
+    vs.textContent = transcript || (alexaMode ? 'Te escucho...' : 'Escuchando...');
+    vs.className = alexaMode ? 'alexa' : 'active';
+
+    // En modo Alexa: reiniciar timer de silencio
+    if (alexaMode && transcript.trim()) {
+      lastSpeechTime = Date.now();
+      resetSilenceTimer();
+    }
   };
 
   recognition.onerror = function(e) {
-    stopListening();
     let vs = document.getElementById('voice-status');
     if (e.error === 'no-speech') {
+      if (alexaMode) {
+        // En modo Alexa, ignorar no-speech y reintentar
+        try { setTimeout(function() { if (alexaMode) recognition.start(); }, 500); } catch(ex) {}
+        return;
+      }
       vs.textContent = 'No te escuché. Intenta de nuevo.';
     } else if (e.error === 'audio-capture') {
       vs.textContent = 'Sin micrófono. Revisa permisos.';
+      if (alexaMode) stopAlexaMode();
     } else if (e.error === 'not-allowed') {
       vs.textContent = 'Permiso de micrófono denegado.';
+      if (alexaMode) stopAlexaMode();
     } else if (e.error === 'aborted') {
-      // Normal al detener, ignorar
+      return;
     } else {
       vs.textContent = 'Error: ' + e.error;
     }
-    vs.className = '';
-    setTimeout(function() {
-      vs.textContent = 'Toca el 🎤 para hablar';
-    }, 3000);
+    if (!alexaMode) {
+      stopListening();
+      vs.className = '';
+      setTimeout(function() {
+        vs.textContent = 'Toca el 🎤: 1=Pulsar 2=Alexa';
+      }, 3000);
+    }
   };
 
   recognition.onend = function() {
-    if (isListening) {
-      // Auto-restart for continuous listening
+    if (micPaused) return; // No reiniciar si está pausado (TTS en progreso)
+    if (alexaMode && !speaking) {
+      try { recognition.start(); } catch(e) {}
+    } else if (isListening && !alexaMode) {
       try { recognition.start(); } catch(e) {}
     }
   };
 }
 
+// Silence timer for Alexa mode
+function resetSilenceTimer() {
+  if (silenceTimer) clearTimeout(silenceTimer);
+  silenceTimer = setTimeout(function() {
+    if (!alexaMode) return;
+    let text = inputEl.value.trim();
+    if (text && Date.now() - lastSpeechTime >= SILENCE_TIMEOUT) {
+      // Pausar mic mientras se envía y TTS responde
+      pauseAlexaMic();
+      document.getElementById('voice-status').textContent = 'Enviando...';
+      send().then(function() {
+        // Esperar a que termine el TTS y reactivar
+        waitForTtsThenResume();
+      });
+    }
+  }, SILENCE_TIMEOUT);
+}
+
+function waitForTtsThenResume() {
+  // Si no está hablando ya, reactivar inmediatamente
+  if (!speaking) { resumeAlexaMic(); return; }
+  let check = setInterval(function() {
+    if (!speaking) {
+      clearInterval(check);
+      resumeAlexaMic();
+    }
+  }, 300);
+  // Timeout de seguridad: 30s max
+  setTimeout(function() { clearInterval(check); if (micPaused) resumeAlexaMic(); }, 30000);
+}
+
+function pauseAlexaMic() {
+  if (silenceTimer) clearTimeout(silenceTimer);
+  micPaused = true;
+  try { recognition.stop(); } catch(e) {}
+}
+
+function resumeAlexaMic() {
+  micPaused = false;
+  if (alexaMode) {
+    document.getElementById('voice-status').textContent = 'Te escucho...';
+    document.getElementById('voice-status').className = 'alexa';
+    try { recognition.start(); } catch(e) {}
+  }
+}
+
 function toggleMic() {
   if (!recognition) { initVoice(); if (!recognition) return; }
-  if (isListening) { stopListening(); }
-  else { startListening(); }
+
+  if (alexaMode) {
+    // Alexa → Apagado
+    stopAlexaMode();
+  } else if (isListening) {
+    // Push-to-talk → Alexa mode
+    stopListeningNoSend();
+    startAlexaMode();
+  } else {
+    // Apagado → Push-to-talk
+    startListening();
+  }
+}
+
+function startAlexaMode() {
+  alexaMode = true;
+  isListening = false;
+  let micBtn = document.getElementById('mic-btn');
+  micBtn.classList.add('alexa-mode');
+  micBtn.innerHTML = '🔵';
+  micBtn.title = 'Modo Alexa activo. Toca para apagar.';
+  document.getElementById('voice-status').textContent = 'Te escucho... Habla cuando quieras';
+  document.getElementById('voice-status').className = 'alexa';
+  inputEl.placeholder = 'Habla, te escucho...';
+  try { recognition.start(); } catch(e) {}
+}
+
+function stopAlexaMode() {
+  alexaMode = false;
+  if (silenceTimer) clearTimeout(silenceTimer);
+  let micBtn = document.getElementById('mic-btn');
+  micBtn.classList.remove('alexa-mode');
+  micBtn.innerHTML = '🎤';
+  micBtn.title = 'Ciclar: Apagado → Pulsar para hablar → Alexa (siempre activo)';
+  document.getElementById('voice-status').textContent = 'Toca el 🎤: 1=Pulsar 2=Alexa';
+  document.getElementById('voice-status').className = '';
+  inputEl.placeholder = 'Escribe o habla tu pregunta...';
+  try { recognition.stop(); } catch(e) {}
 }
 
 function startListening() {
-  if (isListening) return;
+  if (isListening || alexaMode) return;
   isListening = true;
   let micBtn = document.getElementById('mic-btn');
-  micBtn.classList.add('listening');
+  micBtn.classList.add('push-talk');
   micBtn.innerHTML = '🔴';
+  micBtn.title = 'Pulsar para hablar activo. Toca para cambiar a Alexa.';
   document.getElementById('voice-status').textContent = 'Escuchando...';
   document.getElementById('voice-status').className = 'active';
   inputEl.placeholder = 'Habla ahora...';
@@ -232,42 +346,35 @@ function stopListening() {
   if (!isListening) return;
   isListening = false;
   let micBtn = document.getElementById('mic-btn');
-  micBtn.classList.remove('listening');
+  micBtn.classList.remove('push-talk');
   micBtn.innerHTML = '🎤';
   document.getElementById('voice-status').className = '';
   inputEl.placeholder = 'Escribe o habla tu pregunta...';
   try { recognition.stop(); } catch(e) {}
 
-  // Auto-send if there's text
   let text = inputEl.value.trim();
   if (text) {
     document.getElementById('voice-status').textContent = 'Enviando...';
     send();
   } else {
-    document.getElementById('voice-status').textContent = 'Toca el 🎤 para hablar';
+    document.getElementById('voice-status').textContent = 'Toca el 🎤: 1=Pulsar 2=Alexa';
   }
 }
 
-// Hold to talk on mobile, click to toggle on desktop
-(function() {
+function stopListeningNoSend() {
+  if (!isListening) return;
+  isListening = false;
   let micBtn = document.getElementById('mic-btn');
-  let isMobile = 'ontouchstart' in window;
+  micBtn.classList.remove('push-talk');
+  try { recognition.stop(); } catch(e) {}
+}
 
-  if (isMobile) {
-    micBtn.onclick = null;
-    micBtn.addEventListener('touchstart', function(e) {
-      e.preventDefault();
-      startListening();
-    });
-    micBtn.addEventListener('touchend', function(e) {
-      e.preventDefault();
-      stopListening();
-    });
-    micBtn.addEventListener('touchcancel', function(e) {
-      stopListening();
-    });
-  }
-})();
+// Pausar Alexa mientras el asistente habla (TTS)
+let origSpeak = speak;
+speak = function(text) {
+  if (alexaMode) pauseAlexaMic();
+  origSpeak(text);
+};
 
 // Init
 initVoice();
@@ -351,6 +458,7 @@ function speak(text) {
   if (!('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
   if (speaking) { speaking = false; return; }
+  speaking = true; // Marcar antes por si hay que cargar voces
 
   let cleanText = text
     .replace(/```[\s\S]*?```/g, ' (código omitido) ')
@@ -383,7 +491,6 @@ function speakNow(text) {
   if (spanishVoice) utterance.voice = spanishVoice;
   utterance.onend = function() { speaking = false; };
   utterance.onerror = function() { speaking = false; };
-  speaking = true;
   window.speechSynthesis.speak(utterance);
 }
 
