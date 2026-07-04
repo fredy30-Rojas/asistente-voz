@@ -8,9 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ai-coder-native
 
     steps:
       - uses: actions/checkout@v4
@@ -19,8 +16,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: ai-coder-native/package-lock.json
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -30,25 +25,31 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-36 build-tools;36.0.0 platforms;android-34 build-tools;34.0.0'
+
+      - name: Install Android SDK 36
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;36.0.0" 2>/dev/null || \
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;36.0.0" 2>/dev/null || \
+          echo "SDK 36 install attempted via sdkmanager (may already be present)"
 
       - name: Install npm dependencies
+        working-directory: ai-coder-native
         run: npm ci
 
       - name: Copy web files to www/
+        working-directory: ai-coder-native
         run: |
           cp ../web/ai-coder.html www/index.html
           cp ../web/ai-coder-manifest.json www/
           cp ../web/ai-coder-sw.js www/
 
-      - name: Sync Capacitor (copy web assets to Android)
+      - name: Sync Capacitor
+        working-directory: ai-coder-native
         run: npx cap sync
 
       - name: Create local.properties
-        working-directory: ai-coder-native/android
         run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > ai-coder-native/android/local.properties
 
       - name: Build debug APK
         working-directory: ai-coder-native/android
