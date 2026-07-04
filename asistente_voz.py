@@ -25,6 +25,7 @@ import zipfile
 import sounddevice as sd
 import edge_tts
 from vosk import Model, KaldiRecognizer
+from ai import preguntar
 
 # ==================== CONFIGURACION ====================
 MODEL_URL = "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip"
@@ -63,6 +64,13 @@ def beep_error():
 def beep_ok():
     """Beep simple: operacion completada"""
     beep(800, 100)
+
+
+def beep_thinking():
+    """Beep agudo corto: pensando / consultando IA"""
+    beep(1200, 80)
+    time.sleep(0.06)
+    beep(1400, 60)
 
 
 # ==================== DESCARGA DEL MODELO ====================
@@ -152,6 +160,7 @@ class TTSPlayer:
 
     def __init__(self):
         self._lock = threading.Lock()
+        self._playback_lock = threading.Lock()  # evita colision MCI
         self._speaking = False
         self._cooldown_until = 0.0
         self._last_response = ""
@@ -204,6 +213,12 @@ class TTSPlayer:
         if not texto or len(texto.strip()) < 3:
             return
 
+        # Lock de reproduccion: evita que dos hilos usen MCI al mismo tiempo
+        with self._playback_lock:
+            await self._tts_playback(texto)
+
+    async def _tts_playback(self, texto: str):
+        """Reproduccion real con MCI (ya dentro del lock)"""
         clean = clean_markdown(texto).strip()
         if len(clean) > 2000:
             clean = clean[:2000] + "."
@@ -331,8 +346,8 @@ def process_command(text: str, tts: TTSPlayer) -> tuple:
     if any(word in text_lower for word in ["salir", "adios", "terminar", "cerrar"]):
         return ("salir", "Hasta luego.")
 
-    # Comando desconocido: eco
-    return ("responder", f"Has dicho: {text}")
+    # Comando desconocido: preguntar a la IA
+    return ("ia", text)
 
 
 # ==================== ASISTENTE PRINCIPAL ====================
@@ -440,8 +455,22 @@ def main():
                         pass  # no decir nada si no habia TTS activo
                     elif action == "ayuda":
                         tts.hablar_en_hilo(response)
+                    elif action == "ia":
+                        # Preguntar a la IA en un hilo aparte
+                        print(f"Pregunta: {text}")
+                        beep_thinking()
+
+                        def ia_worker(pregunta):
+                            respuesta = preguntar(pregunta)
+                            if respuesta is None:
+                                respuesta = "Lo siento, no pude consultar la inteligencia artificial. Verifica tu conexion a internet."
+                            tts.last_response = respuesta
+                            print(f"IA: {respuesta}")
+                            tts.hablar_en_hilo(respuesta)
+
+                        threading.Thread(target=ia_worker, args=(text,), daemon=True).start()
                     else:
-                        # responder / desconocido
+                        # responder / eco (no deberia llegar aqui con IA)
                         print(f"Respuesta: {response}")
                         tts.hablar_en_hilo(response)
 
