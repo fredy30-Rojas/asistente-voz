@@ -57,13 +57,19 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Find APK files
+      - name: Explore build output
         if: always()
-        run: find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
+        run: |
+          echo "=== Build output structure ==="
+          find ai-coder-native/android/app/build/outputs -type f 2>/dev/null || echo "No build outputs"
+          echo "=== Searching for APK files ==="
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK found"
 
       - name: Upload APK artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ai-coder-debug-apk
           path: ai-coder-native/android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
+          if-no-files-found: warn
