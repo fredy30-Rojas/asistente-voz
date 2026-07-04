@@ -1,0 +1,25 @@
+# Modelo Vosk (39 MB)
+vosk-model-es/
+vosk-model-es.zip
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Archivos temporales
+*.mp3
+*.tmp
+temp/
+
+# Entorno virtual
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
+Thumbs.db
