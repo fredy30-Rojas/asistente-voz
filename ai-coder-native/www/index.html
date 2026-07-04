@@ -86,6 +86,30 @@
     color: #f0c040; padding: 8px 14px; border-radius: 20px;
     font-size: 14px; cursor: pointer; z-index: 50;
   }
+  #voice-bar {
+    display: flex; align-items: center; gap: 8px;
+  }
+  #mic-btn {
+    min-width: 56px; min-height: 56px; width: 56px; height: 56px;
+    border-radius: 50%; background: #2a2a4e; color: #ccc;
+    font-size: 28px; display: flex; align-items: center; justify-content: center;
+    border: 2px solid #444; cursor: pointer; transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent; padding: 0;
+  }
+  #mic-btn:active { background: #3a3a5e; }
+  #mic-btn.listening {
+    background: #ff3333; color: #fff; border-color: #ff3333;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,51,51,0.5); }
+    50% { box-shadow: 0 0 0 12px rgba(255,51,51,0); }
+  }
+  #voice-status {
+    flex: 1; font-size: 14px; color: #888;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #voice-status.active { color: #ff6666; }
 </style>
 </head>
 <body>
@@ -93,7 +117,11 @@
 <div id="chat" aria-live="polite" aria-label="Conversación"></div>
 
 <div id="input-area">
-  <textarea id="user-input" placeholder="Escribe tu pregunta..." aria-label="Escribe tu pregunta"></textarea>
+  <textarea id="user-input" placeholder="Escribe o habla tu pregunta..." aria-label="Escribe o habla tu pregunta"></textarea>
+  <div id="voice-bar">
+    <button id="mic-btn" onclick="toggleMic()" title="Mantén presionado para hablar" aria-label="Presiona para hablar">🎤</button>
+    <span id="voice-status">Toca el 🎤 para hablar</span>
+  </div>
   <div id="button-row">
     <button id="send-btn" onclick="send()">Enviar</button>
     <button id="clear-btn" onclick="clearChat()">🗑️</button>
@@ -126,8 +154,121 @@ let configOverlay = document.getElementById('config-overlay');
 let autoSpeakBadge = document.getElementById('auto-speak-badge');
 let speaking = false;
 let autoSpeak = true;
+let recognition = null;
+let isListening = false;
+
+// Voice recognition init
+function initVoice() {
+  let SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    document.getElementById('mic-btn').style.display = 'none';
+    document.getElementById('voice-status').textContent = 'Voz no disponible en este navegador';
+    return;
+  }
+  recognition = new SpeechRecognition();
+  recognition.lang = 'es-ES';
+  recognition.interimResults = true;
+  recognition.continuous = true;
+  recognition.maxAlternatives = 1;
+
+  recognition.onresult = function(e) {
+    let transcript = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      transcript += e.results[i][0].transcript;
+    }
+    inputEl.value = transcript;
+    let vs = document.getElementById('voice-status');
+    vs.textContent = transcript || 'Escuchando...';
+    vs.className = 'active';
+  };
+
+  recognition.onerror = function(e) {
+    stopListening();
+    let vs = document.getElementById('voice-status');
+    if (e.error === 'no-speech') {
+      vs.textContent = 'No te escuché. Intenta de nuevo.';
+    } else if (e.error === 'audio-capture') {
+      vs.textContent = 'Sin micrófono. Revisa permisos.';
+    } else if (e.error === 'not-allowed') {
+      vs.textContent = 'Permiso de micrófono denegado.';
+    } else {
+      vs.textContent = 'Error: ' + e.error;
+    }
+    vs.className = '';
+    setTimeout(function() {
+      vs.textContent = 'Toca el 🎤 para hablar';
+    }, 3000);
+  };
+
+  recognition.onend = function() {
+    if (isListening) {
+      // Auto-restart for continuous listening
+      try { recognition.start(); } catch(e) {}
+    }
+  };
+}
+
+function toggleMic() {
+  if (!recognition) { initVoice(); if (!recognition) return; }
+  if (isListening) { stopListening(); }
+  else { startListening(); }
+}
+
+function startListening() {
+  if (isListening) return;
+  isListening = true;
+  let micBtn = document.getElementById('mic-btn');
+  micBtn.classList.add('listening');
+  micBtn.innerHTML = '🔴';
+  document.getElementById('voice-status').textContent = 'Escuchando...';
+  document.getElementById('voice-status').className = 'active';
+  inputEl.placeholder = 'Habla ahora...';
+  try { recognition.start(); } catch(e) {}
+}
+
+function stopListening() {
+  if (!isListening) return;
+  isListening = false;
+  let micBtn = document.getElementById('mic-btn');
+  micBtn.classList.remove('listening');
+  micBtn.innerHTML = '🎤';
+  document.getElementById('voice-status').className = '';
+  inputEl.placeholder = 'Escribe o habla tu pregunta...';
+  try { recognition.stop(); } catch(e) {}
+
+  // Auto-send if there's text
+  let text = inputEl.value.trim();
+  if (text) {
+    document.getElementById('voice-status').textContent = 'Enviando...';
+    send();
+  } else {
+    document.getElementById('voice-status').textContent = 'Toca el 🎤 para hablar';
+  }
+}
+
+// Hold to talk on mobile, click to toggle on desktop
+(function() {
+  let micBtn = document.getElementById('mic-btn');
+  let isMobile = 'ontouchstart' in window;
+
+  if (isMobile) {
+    micBtn.onclick = null;
+    micBtn.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      startListening();
+    });
+    micBtn.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      stopListening();
+    });
+    micBtn.addEventListener('touchcancel', function(e) {
+      stopListening();
+    });
+  }
+})();
 
 // Init
+initVoice();
 document.getElementById('api-key').value = localStorage.getItem('groq_api_key') || '';
 if (localStorage.getItem('groq_api_key')) {
   configOverlay.style.display = 'none';
