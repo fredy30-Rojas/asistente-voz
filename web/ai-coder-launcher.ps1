@@ -1,8 +1,8 @@
-# Groq Coder launcher
+# AI Coder launcher
 # Start local server and open app
 
 $port = 8766
-$url = "http://localhost:$port/groq-coder.html"
+$url = "http://localhost:$port/ai-coder.html"
 
 # Check if server already running
 $serverRunning = netstat -an | Select-String "LISTENING" | Select-String ":$port"

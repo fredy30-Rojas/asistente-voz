@@ -18,8 +18,8 @@ Colección de herramientas de voz, TTS e IA para Windows. Diseñado para accesib
 │   ├── clipboard.py          # Monitor de portapapeles a voz
 │   └── crear_vm_oracle.py    # Creador de VM gratuita en Oracle Cloud
 └── web/                      # Interfaces web
-    ├── groq-coder.html       # Chat de IA para programar (con TTS)
-    └── groq-coder-launcher.ps1
+    ├── ai-coder.html       # Chat de IA para programar (con TTS)
+    └── ai-coder-launcher.ps1
 ```
 
 ## 🎤 Asistente de Voz Principal
@@ -103,7 +103,7 @@ Di **"asistente"** → beep doble → di tu comando.
 
 | Herramienta | Descripción |
 |-------------|-------------|
-| `groq-coder.html` | Chat web de IA para programar, con TTS integrado |
+| `ai-coder.html` | Chat web de IA para programar, con TTS integrado |
 
 ## Licencia
 
