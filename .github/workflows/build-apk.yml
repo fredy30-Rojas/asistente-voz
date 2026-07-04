@@ -53,51 +53,12 @@ jobs:
           cp capacitor.config.json android/app/src/main/assets/
 
       - name: Build debug APK
-        id: build
         working-directory: ai-coder-native/android
         run: |
           echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > local.properties
           chmod +x gradlew
           set -o pipefail
-          ./gradlew assembleDebug --stacktrace 2>&1 | tee ../gradle-output.txt
-          echo "GRADLE_EXIT=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
-
-      - name: Show Gradle errors
-        if: failure()
-        run: |
-          echo "# ❌ Gradle Build Failed" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -100 ai-coder-native/gradle-output.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No gradle-output.txt found" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          # Find the line number where FAILURE appears, show from there to end
-          START_LINE=$(grep -n "FAILURE:\|What went wrong:" ai-coder-native/gradle-output.txt 2>/dev/null | head -1 | cut -d: -f1)
-          if [ -n "$START_LINE" ]; then
-            tail -n +$START_LINE ai-coder-native/gradle-output.txt 2>/dev/null | head -40 | while IFS= read -r line; do
-              [ -n "$line" ] && echo "::error::${line}"
-            done
-          else
-            echo "::error::No FAILURE line found in Gradle output"
-          fi
-
-      - name: Explore build directory
-        if: always()
-        run: |
-          echo "=== Directory tree of build outputs ==="
-          find ai-coder-native/android -name "build" -type d | while read dir; do
-            echo "--- $dir ---"
-            find "$dir" -type f 2>/dev/null | head -50
-          done
-          echo "=== Searching for APK files anywhere ==="
-          find . -name "*.apk" -type f 2>/dev/null || echo "NO APK FILES FOUND"
-
-      - name: Upload Gradle output (for debugging)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-output
-          path: ai-coder-native/gradle-output.txt
-          retention-days: 7
-          if-no-files-found: warn
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK artifact
         if: always()
