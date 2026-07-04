@@ -60,6 +60,14 @@ jobs:
           ./gradlew assembleDebug --stacktrace 2>&1 | tee ../gradle-output.txt
           echo "GRADLE_EXIT=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
+      - name: Show Gradle errors in summary
+        if: failure()
+        run: |
+          echo "# ❌ Gradle Build Failed" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -100 ai-coder-native/gradle-output.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No gradle-output.txt found" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
       - name: Explore build directory
         if: always()
         run: |
