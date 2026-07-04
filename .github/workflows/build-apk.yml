@@ -46,7 +46,10 @@ jobs:
 
       - name: Build debug APK
         working-directory: ai-coder-native/android
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME || '/usr/local/lib/android/sdk' }}
         run: |
+          echo "sdk.dir=${ANDROID_HOME}" > local.properties
           chmod +x gradlew
           ./gradlew assembleDebug
 
