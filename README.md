@@ -18,9 +18,10 @@ Colección de herramientas de voz, TTS e IA para Windows. Diseñado para accesib
 │   ├── clipboard.py          # Monitor de portapapeles a voz
 │   └── crear_vm_oracle.py    # Creador de VM gratuita en Oracle Cloud
 └── web/                      # Interfaces web
-    ├── ai-coder.html       # Chat web de IA para programar (con TTS)
+    ├── ai-coder.html       # Chat web de IA (móvil + PC, instalable como app)
     ├── ai-coder-launcher.ps1
-    └── ai_coder_app.py     # App de escritorio: escribes, IA responde y habla
+    ├── ai_coder_app.py     # App de escritorio: escribes, IA responde y habla
+    └── servidor_movil.bat  # Inicia servidor para usar AI Coder desde el móvil
 ```
 
 ## 🎤 Asistente de Voz Principal
@@ -104,8 +105,9 @@ Di **"asistente"** → beep doble → di tu comando.
 
 | Herramienta | Descripción |
 |-------------|-------------|
-| `ai-coder.html` | Chat web de IA para programar, con TTS integrado |
-| `ai_coder_app.py` | App de escritorio tipo Alexa: escribes, IA responde y habla |
+| `ai-coder.html` | Chat web de IA (móvil + PC), instalable como app |
+| `ai_coder_app.py` | App de escritorio: escribes, IA responde y habla |
+| `servidor_movil.bat` | Inicia servidor para usar AI Coder desde el móvil |
 
 ## Licencia
 
