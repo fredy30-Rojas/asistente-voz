@@ -24,7 +24,7 @@ CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY", "")
 
 # Modelos
 GROQ_MODEL = "llama-3.3-70b-versatile"
-CEREBRAS_MODEL = "gpt-oss-120b"
+CEREBRAS_MODEL = "zai-glm-4.7"
 
 # Endpoints (ambos OpenAI-compatibles)
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
