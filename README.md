@@ -1,8 +1,30 @@
-# Asistente de Voz 🎙️
+# Asistente de Voz y Herramientas de Accesibilidad 🎙️
 
-Asistente de voz con reconocimiento de habla en español para Windows.
+Colección de herramientas de voz, TTS e IA para Windows. Diseñado para accesibilidad.
 
-## Características
+## 📁 Estructura
+
+```
+├── asistente_voz.py          # Asistente de voz principal (wake word + comandos)
+├── ai.py                     # Módulo de IA multi-proveedor (Groq + Cerebras)
+├── asistente.bat             # Lanzador rápido
+├── instalar.bat              # Instalador automático
+├── tts/                      # Herramientas de texto a voz
+│   ├── hablar.py             # TTS standalone por línea de comandos
+│   ├── tts_mcp.py            # Servidor MCP TTS para Claude Desktop
+│   └── servidor.py           # Servidor Flask TTS HTTP
+├── utilidades/               # Utilidades varias
+│   ├── clipboard.py          # Monitor de portapapeles a voz
+│   └── crear_vm_oracle.py    # Creador de VM gratuita en Oracle Cloud
+└── web/                      # Interfaces web
+    ├── groq-coder.html       # Chat de IA para programar (con TTS)
+    ├── groq-coder-launcher.ps1
+    └── CLAUDE.md             # Instrucciones para Claude Desktop
+```
+
+## 🎤 Asistente de Voz Principal
+
+### Características
 
 - **Wake word "asistente"** — di "asistente" para activarlo
 - **Reconocimiento offline** con Vosk (modelo español ~39 MB)
@@ -13,7 +35,7 @@ Asistente de voz con reconocimiento de habla en español para Windows.
 - **Cooldown anti-eco**: evita que el TTS se auto-dispare
 - **Modo silencioso** por defecto (sin spam para lectores de pantalla)
 
-## Requisitos
+### Requisitos
 
 ```bash
 pip install vosk sounddevice edge_tts
@@ -31,34 +53,21 @@ set GROQ_API_KEY=gsk_...
 set CEREBRAS_API_KEY=csk_...
 ```
 
-Sin API keys, el asistente solo repite lo que dices (modo eco).
-
-## Instalación rápida (Windows)
+### Instalación rápida (Windows)
 
 ```bash
 instalar.bat
 ```
 
-Esto instala dependencias, descarga el modelo y configura todo automáticamente.
-
-## Uso diario
+### Uso diario
 
 ```bash
 asistente.bat
 ```
 
-O manualmente:
-
-```bash
-python asistente_voz.py
-python asistente_voz.py --verbose   # con transcripción parcial
-```
-
-La primera ejecución descarga automáticamente el modelo Vosk español (39 MB).
-
 Di **"asistente"** → beep doble → di tu comando.
 
-## Comandos de voz
+### Comandos de voz
 
 | Comando | Acción |
 |---------|--------|
@@ -67,6 +76,28 @@ Di **"asistente"** → beep doble → di tu comando.
 | "ayuda" / "comandos" | Lista los comandos disponibles |
 | "salir" / "adiós" | Cierra el asistente |
 | Cualquier otra pregunta | La responde con IA (Groq/Cerebras) |
+
+## 🗣️ Herramientas TTS (`tts/`)
+
+| Herramienta | Uso |
+|-------------|-----|
+| `hablar.py` | `python hablar.py "Texto a hablar"` |
+| `servidor.py` | Servidor Flask en puerto 5500, endpoint `POST /hablar` |
+| `tts_mcp.py` | Servidor MCP para integrar TTS en Claude Desktop |
+
+## 🛠️ Utilidades (`utilidades/`)
+
+| Herramienta | Descripción |
+|-------------|-------------|
+| `clipboard.py` | Detecta cambios en el portapapeles y los lee en voz alta |
+| `crear_vm_oracle.py` | Crea VM ARM gratuita en Oracle Cloud (4 OCPU, 24 GB) |
+
+## 🌐 Web (`web/`)
+
+| Herramienta | Descripción |
+|-------------|-------------|
+| `groq-coder.html` | Chat web de IA para programar, con TTS integrado |
+| `CLAUDE.md` | Configuración de TTS para Claude Desktop |
 
 ## Licencia
 

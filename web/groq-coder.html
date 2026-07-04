@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Coder</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif;
+    font-size: 18px; height: 100vh; display: flex; flex-direction: column;
+  }
+  #chat {
+    flex: 1; overflow-y: auto; padding: 20px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .msg {
+    max-width: 85%; padding: 14px 18px; border-radius: 12px;
+    line-height: 1.6; word-wrap: break-word; position: relative;
+  }
+  .msg.user {
+    align-self: flex-end; background: #0f3460; color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.assistant {
+    align-self: flex-start; background: #16213e; color: #e0e0e0;
+    border-bottom-left-radius: 4px; white-space: pre-wrap;
+  }
+  .msg .speak-btn {
+    background: none; border: none; color: #f0c040; cursor: pointer;
+    font-size: 20px; float: right; margin-left: 10px; padding: 2px 6px;
+  }
+  .msg .speak-btn:hover { color: #ffd700; }
+  #input-area {
+    padding: 16px 20px; background: #111; display: flex;
+    flex-direction: column; gap: 10px;
+  }
+  textarea {
+    width: 100%; height: 120px; background: #222; color: #fff;
+    border: 2px solid #333; border-radius: 8px; padding: 12px;
+    font-size: 18px; font-family: 'Consolas', 'Courier New', monospace;
+    resize: vertical;
+  }
+  textarea:focus { outline: none; border-color: #f0c040; }
+  #button-row {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  button {
+    padding: 12px 24px; font-size: 18px; border: none; border-radius: 8px;
+    cursor: pointer; font-weight: bold; transition: background 0.2s;
+  }
+  #send-btn { background: #f0c040; color: #1a1a2e; }
+  #send-btn:hover { background: #ffd700; }
+  #clear-btn { background: #333; color: #ccc; }
+  #clear-btn:hover { background: #555; }
+  #status { font-size: 14px; color: #888; margin-left: auto; }
+  .config-overlay {
+    position: fixed; top:0; left:0; width:100%; height:100%;
+    background: rgba(0,0,0,0.9); display: flex; align-items: center;
+    justify-content: center; z-index: 100;
+  }
+  .config-box {
+    background: #1a1a2e; padding: 30px; border-radius: 16px;
+    max-width: 500px; width: 90%; border: 2px solid #f0c040;
+  }
+  .config-box h2 { margin-bottom: 16px; color: #f0c040; font-size: 22px; }
+  .config-box input {
+    width: 100%; padding: 12px; font-size: 16px; background: #222;
+    color: #fff; border: 2px solid #333; border-radius: 8px; margin-bottom: 16px;
+  }
+  .config-box button {
+    width: 100%; background: #f0c040; color: #1a1a2e; font-size: 18px;
+  }
+  .config-box .note { font-size: 14px; color: #888; margin-top: 12px; text-align: center; }
+  code { background: #2a2a3e; padding: 2px 6px; border-radius: 4px; font-size: 16px; }
+  pre { background: #111; padding: 14px; border-radius: 8px; overflow-x: auto; font-size: 15px; }
+  .typing { color: #f0c040; font-style: italic; }
+</style>
+</head>
+<body>
+
+<div id="chat" aria-live="polite" aria-label="Conversación"></div>
+
+<div id="input-area">
+  <textarea id="user-input" placeholder="Pega tu código o escribe tu pregunta aquí..." aria-label="Escribe tu pregunta o pega código"></textarea>
+  <div id="button-row">
+    <span id="status"></span>
+  </div>
+</div>
+
+<div class="config-overlay" id="config-overlay">
+  <div class="config-box">
+    <h2>Configura Groq Coder</h2>
+    <label for="api-key">API Key de Groq</label>
+    <input type="password" id="api-key" placeholder="gsk_..." aria-label="API Key de Groq">
+    <button onclick="saveConfig()">Guardar y empezar</button>
+    <p class="note">Tu API key se guarda solo en este navegador.<br>Modelo: Llama 3 70B · Gratis · Respuestas en español</p>
+  </div>
+</div>
+
+<script>
+const GROQ_URL = 'https://api.cerebras.ai/v1/chat/completions';
+const MODEL = 'gpt-oss-120b';
+
+let apiKey = localStorage.getItem('groq_api_key') || '';
+let messages = [];
+let chatEl = document.getElementById('chat');
+let inputEl = document.getElementById('user-input');
+let statusEl = document.getElementById('status');
+let configOverlay = document.getElementById('config-overlay');
+let speaking = false;
+let currentUtterance = null;
+
+// Init
+document.getElementById('api-key').value = localStorage.getItem('groq_api_key') || '';
+if (localStorage.getItem('groq_api_key')) {
+  configOverlay.style.display = 'none';
+  loadHistory();
+} else {
+  configOverlay.style.display = 'flex';
+}
+
+document.getElementById('api-key').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') saveConfig();
+});
+
+inputEl.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+function saveConfig() {
+  apiKey = document.getElementById('api-key').value.trim();
+  if (!apiKey) { alert('Pega tu API key de Groq'); return; }
+  localStorage.setItem('groq_api_key', apiKey);
+  configOverlay.style.display = 'none';
+  addMessage('assistant', '¡Hola! Soy tu asistente de programación con Groq + Llama 3 70B. Pega tu código o hazme cualquier pregunta. Respondo en español.');
+}
+
+function loadHistory() {
+  try {
+    let saved = localStorage.getItem('groq_chat_history');
+    if (saved) {
+      messages = JSON.parse(saved);
+      chatEl.innerHTML = '';
+      messages.forEach(function(m) { renderMessage(m); });
+      chatEl.scrollTop = chatEl.scrollHeight;
+    } else {
+      addMessage('assistant', '¡Hola! Soy tu asistente de programación con Groq + Llama 3 70B. Pega tu código o hazme cualquier pregunta. Respondo en español.');
+    }
+  } catch(e) {
+    messages = [];
+    localStorage.removeItem('groq_chat_history');
+    addMessage('assistant', '¡Hola! Soy tu asistente de programación con Groq + Llama 3 70B. Pega tu código o hazme cualquier pregunta. Respondo en español.');
+  }
+}
+
+function saveHistory() {
+  localStorage.setItem('groq_chat_history', JSON.stringify(messages));
+}
+
+function addMessage(role, content) {
+  let msg = { role: role, content: content };
+  messages.push(msg);
+  renderMessage(msg);
+  saveHistory();
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function renderMessage(msg) {
+  let div = document.createElement('div');
+  div.className = 'msg ' + msg.role;
+
+  let text = document.createElement('span');
+  text.textContent = msg.content;
+
+  let speakBtn = document.createElement('button');
+  speakBtn.className = 'speak-btn';
+  speakBtn.innerHTML = '🔊';
+  speakBtn.title = 'Leer en voz alta';
+  speakBtn.setAttribute('aria-label', 'Leer en voz alta');
+  speakBtn.onclick = function() { speak(msg.content); };
+
+  div.appendChild(speakBtn);
+  div.appendChild(text);
+  chatEl.appendChild(div);
+}
+
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+
+  // Stop any current speech
+  window.speechSynthesis.cancel();
+
+  if (speaking) { speaking = false; return; }
+
+  // Clean markdown symbols for speech
+  let cleanText = text
+    .replace(/```[\s\S]*?```/g, ' (codigo omitido para lectura) ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/_{1,3}/g, '')
+    .replace(/~~/g, '');
+
+  // Cargar voces (getVoices es asincrono, puede estar vacio la primera vez)
+  let voices = window.speechSynthesis.getVoices();
+  if (voices.length === 0) {
+    window.speechSynthesis.onvoiceschanged = function() {
+      window.speechSynthesis.onvoiceschanged = null;
+      speakNow(cleanText);
+    };
+    return;
+  }
+  speakNow(cleanText);
+}
+
+function speakNow(text) {
+  let utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'es-ES';
+  utterance.rate = 1.0;
+  utterance.pitch = 1.0;
+  let voices = window.speechSynthesis.getVoices();
+  // Buscar voz masculina: Alvaro o Pablo (Microsoft)
+  let alvaro = voices.find(function(v) { return v.name.indexOf('Alvaro') !== -1; });
+  if (!alvaro) alvaro = voices.find(function(v) { return v.name === 'Microsoft Pablo' || v.name === 'Microsoft Alvaro'; });
+  if (!alvaro) alvaro = voices.find(function(v) { return v.lang === 'es-ES' && v.name.indexOf('Microsoft') !== -1; });
+  if (alvaro) utterance.voice = alvaro;
+  utterance.onend = function() { speaking = false; };
+  utterance.onerror = function() { speaking = false; };
+  speaking = true;
+  window.speechSynthesis.speak(utterance);
+}
+
+async function send() {
+  let userText = inputEl.value.trim();
+  if (!userText) return;
+  if (!apiKey) { configOverlay.style.display = 'flex'; return; }
+
+  addMessage('user', userText);
+  inputEl.value = '';
+  statusEl.textContent = 'Pensando...';
+
+  // Build API messages with system prompt
+  let apiMessages = [{
+    role: 'system',
+    content: 'Eres un asistente experto en programación. Respondes SIEMPRE en español. Explicas el código paso a paso, de forma clara y didáctica. Si te pasan código, lo analizas y sugieres mejoras. Si te preguntan cómo hacer algo, das ejemplos de código completos y funcionales. Eres cálido, paciente y motivador, como un buen mentor. Usas un lenguaje natural, nada robótico. Cuando el código es largo, lo explicas por partes.'
+  }];
+
+  // Only include last 20 messages to stay within context limits
+  let recentMessages = messages.slice(-20);
+  apiMessages = apiMessages.concat(recentMessages.map(function(m) {
+    return { role: m.role, content: m.content };
+  }));
+
+  try {
+    let xhr = new XMLHttpRequest();
+    xhr.open('POST', GROQ_URL, true);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + apiKey);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+
+    let response = await new Promise(function(resolve, reject) {
+      xhr.onload = function() { resolve(xhr); };
+      xhr.onerror = function() { reject(new Error('Network error')); };
+      xhr.ontimeout = function() { reject(new Error('Timeout')); };
+      xhr.timeout = 60000;
+      xhr.send(JSON.stringify({
+        model: MODEL,
+        messages: apiMessages,
+        temperature: 0.7,
+        max_tokens: 4096
+      }));
+    });
+
+    let data = JSON.parse(response.responseText);
+
+    if (data.error) {
+      addMessage('assistant', 'Error: ' + data.error.message);
+      statusEl.textContent = 'Error';
+    } else if (data.choices && data.choices[0]) {
+      let reply = data.choices[0].message.content;
+      addMessage('assistant', reply);
+      statusEl.textContent = 'Listo';
+      speak(reply);
+    } else {
+      addMessage('assistant', 'No obtuve respuesta. Revisa tu API key.');
+      statusEl.textContent = 'Sin respuesta';
+    }
+  } catch(e) {
+    addMessage('assistant', 'Error de conexion: ' + e.message + '. Tienes internet?');
+    statusEl.textContent = 'Error de red';
+  }
+}
+
+function clearChat() {
+  if (confirm('¿Borrar todo el historial?')) {
+    messages = [];
+    localStorage.removeItem('groq_chat_history');
+    chatEl.innerHTML = '';
+    addMessage('assistant', 'Historial limpio. ¿En qué te ayudo?');
+  }
+}
+</script>
+</body>
+</html>
