@@ -67,10 +67,15 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           tail -100 ai-coder-native/gradle-output.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No gradle-output.txt found" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          # Output LAST 30 lines as individual annotations
-          tail -30 ai-coder-native/gradle-output.txt 2>/dev/null | while IFS= read -r line; do
-            [ -n "$line" ] && echo "::error::${line}"
-          done
+          # Find the line number where FAILURE appears, show from there to end
+          START_LINE=$(grep -n "FAILURE:\|What went wrong:" ai-coder-native/gradle-output.txt 2>/dev/null | head -1 | cut -d: -f1)
+          if [ -n "$START_LINE" ]; then
+            tail -n +$START_LINE ai-coder-native/gradle-output.txt 2>/dev/null | head -40 | while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::${line}"
+            done
+          else
+            echo "::error::No FAILURE line found in Gradle output"
+          fi
 
       - name: Explore build directory
         if: always()
