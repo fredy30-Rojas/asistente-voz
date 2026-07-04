@@ -258,10 +258,14 @@ class TTSPlayer:
                     finally:
                         winmm.mciSendStringW('close tts_audio', None, 0, None)
                 else:
-                    # Fallback: usar sounddevice (solo WAV, pero si MCI falla
-                    # probablemente es un sistema sin codecs MPEG)
-                    print("  Aviso: codec MCI no disponible, usando alternativa...")
-                    beep_error()
+                    # Fallback: abrir con reproductor por defecto de Windows
+                    print("  Aviso: codec MCI no disponible, usando reproductor del sistema...")
+                    try:
+                        os.startfile(mp3_path)
+                        # Esperar aproximado: 1.2 seg por cada 100 caracteres
+                        time.sleep(min(len(clean) * 0.012, 30))
+                    except Exception:
+                        beep_error()
             else:
                 # Linux/Mac: usar ffplay si esta disponible
                 import subprocess
@@ -271,8 +275,11 @@ class TTSPlayer:
                         timeout=120, check=True
                     )
                 except (FileNotFoundError, subprocess.TimeoutExpired):
-                    # Fallback: usar sounddevice con archivos WAV solamente
-                    pass
+                    # Fallback: abrir con reproductor por defecto del sistema
+                    try:
+                        os.startfile(mp3_path)
+                    except Exception:
+                        pass
 
         except Exception as e:
             if VERBOSE:
@@ -289,8 +296,12 @@ class TTSPlayer:
         self._clear_stop()
         asyncio.run(self._tts_async(texto))
 
-    def hablar_en_hilo(self, texto: str) -> threading.Thread:
+    def hablar_en_hilo(self, texto: str) -> threading.Thread | None:
         """Ejecuta TTS en hilo aparte, maneja flags de estado"""
+
+        # Si ya esta hablando, no acumular
+        if self.speaking:
+            return None
 
         def _run():
             self.speaking = True

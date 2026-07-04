@@ -43,6 +43,7 @@ SYSTEM_PROMPT = (
 )
 
 
+
 # ==================== PROVEEDORES ====================
 
 def _call_api(url: str, api_key: str, model: str, question: str) -> str | None:
@@ -70,7 +71,15 @@ def _call_api(url: str, api_key: str, model: str, question: str) -> str | None:
 
     try:
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read().decode("utf-8")
+            data = json.loads(raw)
+            # Manejar errores de API (rate limit, auth, etc.)
+            if "error" in data:
+                print(f"  [AI] Error API: {data['error']}")
+                return None
+            if "choices" not in data or len(data["choices"]) == 0:
+                print(f"  [AI] Respuesta inesperada: {raw[:200]}")
+                return None
             return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"  [AI] Error: {e}")

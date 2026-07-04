@@ -66,13 +66,10 @@ echo [5/5] Creando lanzador asistente.bat...
 (
 echo @echo off
 echo chcp 65001 ^>nul
-if not "%GROQ_KEY%"=="" (
-    echo set GROQ_API_KEY=%GROQ_KEY%
-)
 echo echo Iniciando Asistente de Voz...
 echo echo Di "asistente" para activarme. Ctrl+C para salir.
 echo echo.
-echo cd /d "%~dp0"
+echo cd /d "%%~dp0"
 echo python asistente_voz.py %%*
 echo echo.
 echo echo Asistente cerrado.
