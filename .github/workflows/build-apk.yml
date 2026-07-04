@@ -35,6 +35,7 @@ jobs:
       - name: Copy web files to www/
         working-directory: ai-coder-native
         run: |
+          mkdir -p www
           cp ../web/ai-coder.html www/index.html
           cp ../web/ai-coder-manifest.json www/
           cp ../web/ai-coder-sw.js www/
