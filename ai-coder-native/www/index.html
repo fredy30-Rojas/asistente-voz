@@ -168,6 +168,8 @@ let isListening = false;
 let alexaMode = false;
 let micPaused = false;
 let wakeDetected = false;
+let wakeResultCount = 0;
+let wakeAfterText = '';
 let silenceTimer = null;
 let lastSpeechTime = 0;
 const SILENCE_TIMEOUT = 2500; // 2.5 segundos de silencio → enviar
@@ -220,24 +222,29 @@ function initVoice() {
         if (idx !== -1) {
           // ¡Palabra clave detectada!
           wakeDetected = true;
+          wakeResultCount = e.results.length;
+          wakeAfterText = transcript.substring(idx + WAKE_WORD.length).trim();
           playBeep();
-          // Extraer solo el texto después de la palabra clave
-          let afterWake = transcript.substring(idx + WAKE_WORD.length).trim();
-          inputEl.value = afterWake;
-          vs.textContent = afterWake || 'Te escucho...';
+          inputEl.value = wakeAfterText;
+          vs.textContent = wakeAfterText || 'Te escucho...';
           vs.className = 'alexa';
           lastSpeechTime = Date.now();
-          if (afterWake) resetSilenceTimer();
+          if (wakeAfterText) resetSilenceTimer();
         } else {
           vs.textContent = 'Di "' + WAKE_WORD + '"...';
           vs.className = 'alexa';
         }
         return;
       }
-      // Wake word ya detectado: mostrar texto y timer de silencio
-      vs.textContent = transcript || 'Te escucho...';
+      // Wake word ya detectado: mostrar solo texto nuevo
+      let newText = wakeAfterText;
+      for (let i = wakeResultCount; i < e.results.length; i++) {
+        newText += e.results[i][0].transcript;
+      }
+      inputEl.value = newText;
+      vs.textContent = newText || 'Te escucho...';
       vs.className = 'alexa';
-      if (transcript.trim()) {
+      if (newText.trim()) {
         lastSpeechTime = Date.now();
         resetSilenceTimer();
       }
@@ -328,6 +335,7 @@ function pauseAlexaMic() {
 function resumeAlexaMic() {
   micPaused = false;
   wakeDetected = false;
+  wakeAfterText = '';
   if (silenceTimer) clearTimeout(silenceTimer);
   if (alexaMode) {
     document.getElementById('voice-status').textContent = 'Di "' + WAKE_WORD + '"...';
@@ -405,16 +413,6 @@ function stopListening() {
 
   let text = inputEl.value.trim();
   if (text) {
-    // En modo Alexa con wake word, limpiar la palabra clave del texto
-    if (alexaMode) {
-      let lower = text.toLowerCase();
-      let idx = lower.indexOf(WAKE_WORD);
-      if (idx === 0) {
-        text = text.substring(WAKE_WORD.length).trim();
-        inputEl.value = text;
-        if (!text) { resumeAlexaMic(); return; }
-      }
-    }
     document.getElementById('voice-status').textContent = 'Enviando...';
     send();
   } else {
@@ -443,6 +441,8 @@ document.getElementById('api-key').value = localStorage.getItem('groq_api_key') 
 if (localStorage.getItem('groq_api_key')) {
   configOverlay.style.display = 'none';
   loadHistory();
+  // Activar modo Alexa automaticamente al abrir
+  setTimeout(function() { startAlexaMode(); }, 800);
 } else {
   configOverlay.style.display = 'flex';
 }
@@ -466,7 +466,9 @@ function saveConfig() {
   if (!apiKey) { alert('Pega tu API key'); return; }
   localStorage.setItem('groq_api_key', apiKey);
   configOverlay.style.display = 'none';
-  addMessage('assistant', '¡Hola! Soy AI Coder, tu asistente con IA. Escribe y te respondo hablándote. Funciono en móvil y PC.');
+  addMessage('assistant', 'AI Coder listo. Di "asistente" y hare lo que necesites.');
+  // Activar modo Alexa automaticamente
+  setTimeout(function() { startAlexaMode(); }, 500);
 }
 
 function loadHistory() {
@@ -478,12 +480,12 @@ function loadHistory() {
       messages.forEach(function(m) { renderMessage(m); });
       chatEl.scrollTop = chatEl.scrollHeight;
     } else {
-      addMessage('assistant', '¡Hola! Soy AI Coder, tu asistente con IA. Escribe y te respondo hablándote. Funciono en móvil y PC.');
+      addMessage('assistant', 'AI Coder listo. Di "asistente" y hare lo que necesites.');
     }
   } catch(e) {
     messages = [];
     localStorage.removeItem('groq_chat_history');
-    addMessage('assistant', '¡Hola! Soy AI Coder, tu asistente con IA. Escribe y te respondo hablándote.');
+    addMessage('assistant', 'AI Coder listo. Di "asistente" y hare lo que necesites.');
   }
 }
 

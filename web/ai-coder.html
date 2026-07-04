@@ -441,6 +441,8 @@ document.getElementById('api-key').value = localStorage.getItem('groq_api_key') 
 if (localStorage.getItem('groq_api_key')) {
   configOverlay.style.display = 'none';
   loadHistory();
+  // Activar modo Alexa automaticamente al abrir
+  setTimeout(function() { startAlexaMode(); }, 800);
 } else {
   configOverlay.style.display = 'flex';
 }
@@ -464,7 +466,9 @@ function saveConfig() {
   if (!apiKey) { alert('Pega tu API key'); return; }
   localStorage.setItem('groq_api_key', apiKey);
   configOverlay.style.display = 'none';
-  addMessage('assistant', '¡Hola! Soy AI Coder, tu asistente con IA. Escribe y te respondo hablándote. Funciono en móvil y PC.');
+  addMessage('assistant', 'AI Coder listo. Di "asistente" y hare lo que necesites.');
+  // Activar modo Alexa automaticamente
+  setTimeout(function() { startAlexaMode(); }, 500);
 }
 
 function loadHistory() {
@@ -476,12 +480,12 @@ function loadHistory() {
       messages.forEach(function(m) { renderMessage(m); });
       chatEl.scrollTop = chatEl.scrollHeight;
     } else {
-      addMessage('assistant', '¡Hola! Soy AI Coder, tu asistente con IA. Escribe y te respondo hablándote. Funciono en móvil y PC.');
+      addMessage('assistant', 'AI Coder listo. Di "asistente" y hare lo que necesites.');
     }
   } catch(e) {
     messages = [];
     localStorage.removeItem('groq_chat_history');
-    addMessage('assistant', '¡Hola! Soy AI Coder, tu asistente con IA. Escribe y te respondo hablándote.');
+    addMessage('assistant', 'AI Coder listo. Di "asistente" y hare lo que necesites.');
   }
 }
 
