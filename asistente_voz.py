@@ -201,7 +201,8 @@ class TTSPlayer:
         with self._lock:
             self._stop_requested = True
 
-    def _is_stop_requested(self):
+    @property
+    def stop_requested(self):
         with self._lock:
             return self._stop_requested
 
@@ -224,12 +225,13 @@ class TTSPlayer:
         if len(clean) > 2000:
             clean = clean[:2000] + "."
 
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
-            mp3_path = tmp.name
+        # Archivo temporal fijo: se sobreescribe en cada uso, evita fugas de disco
+        mp3_path = os.path.join(tempfile.gettempdir(), "asistente_voz_tts.mp3")
 
         try:
             comm = edge_tts.Communicate(clean, voice=VOICE, rate=RATE)
-            await comm.save(mp3_path)
+            # Timeout de red: evita bloqueo permanente si se corta internet
+            await asyncio.wait_for(comm.save(mp3_path), timeout=15)
 
             # API nativa MCI de Windows: reproduce MP3 sin ventanas
             if sys.platform == "win32":
@@ -246,7 +248,7 @@ class TTSPlayer:
                             # Polling para poder detectar stop_requested
                             while True:
                                 time.sleep(0.2)
-                                if self._is_stop_requested():
+                                if self.stop_requested:
                                     winmm.mciSendStringW('stop tts_audio', None, 0, None)
                                     break
                                 buf = ctypes.create_unicode_buffer(128)
@@ -281,15 +283,16 @@ class TTSPlayer:
                     except Exception:
                         pass
 
+        except asyncio.TimeoutError:
+            print("  [TTS] Timeout de red al generar audio")
+            beep_error()
         except Exception as e:
             if VERBOSE:
                 print(f"  Error TTS: {e}")
             beep_error()
         finally:
-            try:
-                os.remove(mp3_path)
-            except Exception:
-                pass
+            # No borrar: archivo fijo se sobreescribe en el proximo uso
+            pass
 
     def hablar(self, texto: str):
         """Wrapper sync para TTS"""
@@ -299,12 +302,13 @@ class TTSPlayer:
     def hablar_en_hilo(self, texto: str) -> threading.Thread | None:
         """Ejecuta TTS en hilo aparte, maneja flags de estado"""
 
-        # Si ya esta hablando, no acumular
-        if self.speaking:
-            return None
+        # Atomico: setear speaking=True ANTES de spawnear el hilo
+        with self._lock:
+            if self._speaking:
+                return None
+            self._speaking = True
 
         def _run():
-            self.speaking = True
             try:
                 self.hablar(texto)
             finally:
@@ -334,6 +338,7 @@ def process_command(text: str, tts: TTSPlayer) -> tuple:
         if was_speaking:
             return ("cancelar", "De acuerdo, me callo.")
         else:
+            # Si habia IA pensando, la cancelamos tambien
             return ("cancelar_silent", "")
 
     # Comando: repetir
@@ -389,6 +394,7 @@ def main():
     # Estados
     listening_for_command = False
     wake_time = 0.0
+    ia_pensando = False  # evita spawnear multiples hilos de IA a la vez
 
     def audio_callback(indata, frames, time_info, status):
         """Callback de sounddevice: recibe audio del microfono"""
@@ -445,6 +451,15 @@ def main():
                         break
                 continue
 
+            # IA pensando: ignorar audio (evitar saturar la API)
+            if ia_pensando:
+                while not q.empty():
+                    try:
+                        q.get_nowait()
+                    except queue.Empty:
+                        break
+                continue
+
             if rec.AcceptWaveform(data):
                 result = json.loads(rec.Result())
                 text = result.get('text', '').strip().lower()
@@ -468,7 +483,9 @@ def main():
                         tts.hablar_en_hilo(response)
                     elif action == "cancelar":
                         tts.hablar_en_hilo(response)
+                        ia_pensando = False  # destrabar si la IA estaba pensando
                     elif action == "cancelar_silent":
+                        ia_pensando = False  # destrabar si la IA estaba pensando
                         pass  # no decir nada si no habia TTS activo
                     elif action == "ayuda":
                         tts.hablar_en_hilo(response)
@@ -476,13 +493,21 @@ def main():
                         # Preguntar a la IA en un hilo aparte
                         print(f"Pregunta: {text}")
                         beep_thinking()
+                        ia_pensando = True
 
                         def ia_worker(pregunta):
+                            nonlocal ia_pensando
                             respuesta = preguntar(pregunta)
+                            # Verificar si el usuario cancelo mientras pensaba
+                            if tts.stop_requested:
+                                print("  IA cancelada por el usuario")
+                                ia_pensando = False
+                                return
                             if respuesta is None:
                                 respuesta = "Lo siento, no pude consultar la inteligencia artificial. Verifica tu conexion a internet."
                             tts.last_response = respuesta
                             print(f"IA: {respuesta}")
+                            ia_pensando = False
                             tts.hablar_en_hilo(respuesta)
 
                         threading.Thread(target=ia_worker, args=(text,), daemon=True).start()
