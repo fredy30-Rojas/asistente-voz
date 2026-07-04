@@ -55,7 +55,15 @@ jobs:
         run: |
           echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > local.properties
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace --info 2>&1 | tee build-log.txt
+
+      - name: Upload build log (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ai-coder-native/android/build-log.txt
+          retention-days: 7
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
