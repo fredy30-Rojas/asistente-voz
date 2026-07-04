@@ -17,11 +17,15 @@ Colección de herramientas de voz, TTS e IA para Windows. Diseñado para accesib
 ├── utilidades/               # Utilidades varias
 │   ├── clipboard.py          # Monitor de portapapeles a voz
 │   └── crear_vm_oracle.py    # Creador de VM gratuita en Oracle Cloud
-└── web/                      # Interfaces web
-    ├── ai-coder.html       # Chat web de IA (móvil + PC, instalable como app)
-    ├── ai-coder-launcher.ps1
-    ├── ai_coder_app.py     # App de escritorio: escribes, IA responde y habla
-    └── servidor_movil.bat  # Inicia servidor para usar AI Coder desde el móvil
+├── web/                      # Interfaces web
+│   ├── ai-coder.html       # Chat web de IA (móvil + PC, instalable como app)
+│   ├── ai-coder-launcher.ps1
+│   ├── ai_coder_app.py     # App de escritorio: escribes, IA responde y habla
+│   └── servidor_movil.bat  # Inicia servidor para usar AI Coder desde el móvil
+└── ai-coder-native/          # App nativa Android (Capacitor)
+    ├── capacitor.config.json
+    ├── www/                # Archivos web de la app
+    └── android/            # Proyecto Android nativo
 ```
 
 ## 🎤 Asistente de Voz Principal
@@ -108,6 +112,30 @@ Di **"asistente"** → beep doble → di tu comando.
 | `ai-coder.html` | Chat web de IA (móvil + PC), instalable como app |
 | `ai_coder_app.py` | App de escritorio: escribes, IA responde y habla |
 | `servidor_movil.bat` | Inicia servidor para usar AI Coder desde el móvil |
+
+## 📱 App Nativa Android (`ai-coder-native/`)
+
+AI Coder como app nativa de Android usando Capacitor. Convierte `ai-coder.html` en un APK instalable.
+
+### Compilación automática (GitHub Actions)
+
+Cada push a `master` genera un APK automáticamente. Descarga el APK desde:
+**Actions → Build Android APK → Artifacts → ai-coder-debug-apk**
+
+### Compilación local
+
+```bash
+cd ai-coder-native
+npm install
+cp ../web/ai-coder.html www/index.html
+cp ../web/ai-coder-manifest.json www/
+cp ../web/ai-coder-sw.js www/
+npx cap sync
+cd android && ./gradlew assembleDebug
+# APK en: android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Requisitos: Node.js, Java 17, Android SDK.
 
 ## Licencia
 
