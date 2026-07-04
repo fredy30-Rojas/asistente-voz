@@ -37,7 +37,7 @@ jobs:
       - name: Patch Capacitor AGP version (8.13.0 no existe)
         working-directory: ai-coder-native
         run: |
-          sed -i "s/com.android.tools.build:gradle:8.13.0/com.android.tools.build:gradle:8.2.2/g" node_modules/@capacitor/android/capacitor/build.gradle
+          sed -i "s/com.android.tools.build:gradle:8.13.0/com.android.tools.build:gradle:8.6.0/g" node_modules/@capacitor/android/capacitor/build.gradle
           echo "Capacitor AGP parcheado"
 
       - name: Prepare web assets
