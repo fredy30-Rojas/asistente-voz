@@ -16,6 +16,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ai-coder-native/package-lock.json
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -28,9 +30,11 @@ jobs:
 
       - name: Install Android SDK 36
         run: |
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;36.0.0" 2>/dev/null || \
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;36.0.0" 2>/dev/null || \
-          echo "SDK 36 install attempted via sdkmanager (may already be present)"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          echo "Installing Android SDK 36..."
+          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;36.0.0" || \
+          yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" || \
+          echo "SDK 36 install attempted (may already be present)"
 
       - name: Install npm dependencies
         working-directory: ai-coder-native
@@ -49,7 +53,7 @@ jobs:
 
       - name: Create local.properties
         run: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > ai-coder-native/android/local.properties
+          echo "sdk.dir=${ANDROID_SDK_ROOT:-$ANDROID_HOME}" > ai-coder-native/android/local.properties
 
       - name: Build debug APK
         working-directory: ai-coder-native/android
