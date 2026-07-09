@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Apps (Android + iOS)
 
 on:
   push:
@@ -6,8 +6,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-android:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app:
+          - ai-coder-native
+          - family-tracker
 
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +22,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: ai-coder-native/package-lock.json
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
 
       - name: Setup Java 21
         uses: actions/setup-java@v4
@@ -31,42 +36,99 @@ jobs:
           packages: 'platforms;android-36'
 
       - name: Install npm dependencies
-        working-directory: ai-coder-native
+        working-directory: ${{ matrix.app }}
         run: npm ci
 
       - name: Patch Capacitor AGP version (8.13.0 no existe)
-        working-directory: ai-coder-native
+        working-directory: ${{ matrix.app }}
         run: |
           sed -i "s/com.android.tools.build:gradle:8.13.0/com.android.tools.build:gradle:8.9.2/g" node_modules/@capacitor/android/capacitor/build.gradle
           echo "Capacitor AGP parcheado"
 
-      - name: Prepare web assets
-        working-directory: ai-coder-native
+      - name: Prepare web assets (${{ matrix.app }})
+        working-directory: ${{ matrix.app }}
         run: |
-          mkdir -p www
-          cp ../web/ai-coder.html www/index.html
-          cp ../web/ai-coder-manifest.json www/
-          cp ../web/ai-coder-sw.js www/
-          # Copiar assets a Android
-          mkdir -p android/app/src/main/assets/public
-          cp -r www/* android/app/src/main/assets/public/
-          cp capacitor.config.json android/app/src/main/assets/
+          if [ "${{ matrix.app }}" = "ai-coder-native" ]; then
+            mkdir -p www
+            cp ../web/ai-coder.html www/index.html
+            cp ../web/ai-coder-manifest.json www/
+            cp ../web/ai-coder-sw.js www/
+            mkdir -p android/app/src/main/assets/public
+            cp -r www/* android/app/src/main/assets/public/
+            cp capacitor.config.json android/app/src/main/assets/
+          elif [ "${{ matrix.app }}" = "family-tracker" ]; then
+            mkdir -p android/app/src/main/assets/public
+            cp -r www/* android/app/src/main/assets/public/
+            cp capacitor.config.json android/app/src/main/assets/
+            echo "family-tracker assets preparados"
+          fi
 
-      - name: Build debug APK
-        working-directory: ai-coder-native/android
+      - name: Build debug APK (${{ matrix.app }})
+        working-directory: ${{ matrix.app }}/android
         run: |
           echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > local.properties
           chmod +x gradlew
           set -o pipefail
           ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK artifact
+      - name: Upload APK artifact (${{ matrix.app }})
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ai-coder-debug-apk
+          name: ${{ matrix.app }}-debug-apk
           path: |
-            ai-coder-native/android/app/build/outputs/apk/debug/*.apk
-            ai-coder-native/android/app/build/outputs/apk/**/*.apk
+            ${{ matrix.app }}/android/app/build/outputs/apk/debug/*.apk
+            ${{ matrix.app }}/android/app/build/outputs/apk/**/*.apk
+          retention-days: 30
+          if-no-files-found: warn
+
+  build-ios:
+    # iOS requiere macOS runner (10x más caro que ubuntu)
+    # Solo se ejecuta manualmente con workflow_dispatch o en push a main
+    # Descomentar para activar:
+    # if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    if: false  # Desactivado por defecto (requiere macOS runner de pago)
+    runs-on: macos-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: family-tracker/package-lock.json
+
+      - name: Install npm dependencies
+        working-directory: family-tracker
+        run: npm ci
+
+      - name: Sync Capacitor iOS
+        working-directory: family-tracker
+        run: npx cap sync ios
+
+      - name: Build iOS
+        working-directory: family-tracker/ios/App
+        run: |
+          pod install 2>/dev/null || true
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -sdk iphoneos \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/App.xcarchive \
+            archive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload iOS artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-tracker-ios-app
+          path: |
+            family-tracker/ios/App/build/App.xcarchive
           retention-days: 30
           if-no-files-found: warn
