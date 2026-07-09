@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Rastreador Familiar - Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        #map { height: 100%; width: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+        #header {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            background: rgba(0,0,0,0.85); color: white; padding: 10px 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            backdrop-filter: blur(10px);
+        }
+        #header h1 { font-size: 18px; font-weight: 600; }
+        #header .badge { font-size: 12px; background: #22c55e; padding: 4px 10px; border-radius: 12px; }
+        #header .badge.offline { background: #ef4444; }
+        #status-bar {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000;
+            background: rgba(0,0,0,0.85); color: white; padding: 10px 16px;
+            display: flex; align-items: center; gap: 10px; font-size: 13px;
+            backdrop-filter: blur(10px);
+        }
+        .led { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .led.green { background: #22c55e; animation: pulse 2s infinite; }
+        .led.red { background: #ef4444; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .leaflet-popup-content { font-size: 14px; line-height: 1.5; }
+        .leaflet-popup-content strong { display: block; font-size: 16px; margin-bottom: 4px; }
+        .battery-ok { color: #22c55e; }
+        .battery-low { color: #ef4444; }
+        .gmaps-link {
+            display: inline-block; margin-top: 6px; background: #3b82f6; color: white;
+            padding: 4px 10px; border-radius: 6px; text-decoration: none; font-size: 12px;
+        }
+        .gmaps-link:hover { background: #2563eb; }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>📍 Rastreador Familiar</h1>
+        <span id="badge" class="badge">Cargando...</span>
+    </div>
+    <div id="map"></div>
+    <div id="status-bar">
+        <span id="led" class="led green"></span>
+        <span id="status-text">Actualizando...</span>
+        <span style="margin-left:auto;font-size:11px;opacity:0.7" id="last-update"></span>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Inicializar mapa centrado en Rubí, Barcelona
+        const map = L.map('map').setView([41.49, 2.03], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        const markers = {};
+        const API_URL = '/api/gps';
+        const badge = document.getElementById('badge');
+        const led = document.getElementById('led');
+        const statusText = document.getElementById('status-text');
+        const lastUpdate = document.getElementById('last-update');
+
+        function getMarkerColor(ageMinutes) {
+            if (ageMinutes == null) return '#ef4444'; // rojo
+            if (ageMinutes < 15) return '#22c55e'; // verde
+            if (ageMinutes < 60) return '#f97316'; // naranja
+            return '#ef4444'; // rojo
+        }
+
+        function capitalize(name) {
+            return name.charAt(0).toUpperCase() + name.slice(1);
+        }
+
+        async function fetchLocations() {
+            try {
+                const resp = await fetch(API_URL);
+                if (!resp.ok) {
+                    statusText.textContent = 'Error del servidor';
+                    led.className = 'led red';
+                    badge.textContent = 'Sin conexión';
+                    badge.className = 'badge offline';
+                    return;
+                }
+                const data = await resp.json();
+                const names = Object.keys(data);
+
+                // Actualizar badge
+                if (names.length === 0) {
+                    badge.textContent = 'Sin rastreadores';
+                    badge.className = 'badge offline';
+                } else {
+                    badge.textContent = names.length + ' activo(s)';
+                    badge.className = 'badge';
+                }
+
+                led.className = 'led green';
+                statusText.textContent = names.length + ' persona(s) rastreada(s)';
+                lastUpdate.textContent = 'Actualizado: ' + new Date().toLocaleTimeString();
+
+                // Mantener registro de nombres actuales
+                const currentNames = new Set(names);
+
+                // Eliminar marcadores de personas que ya no están
+                for (const name in markers) {
+                    if (!currentNames.has(name)) {
+                        map.removeLayer(markers[name]);
+                        delete markers[name];
+                    }
+                }
+
+                // Actualizar o crear marcadores
+                for (const name of names) {
+                    const entry = data[name];
+                    const lat = entry.lat;
+                    const lon = entry.lon;
+                    const age = entry.age_minutes;
+                    const battery = entry.battery;
+                    const mapsUrl = entry.maps_url;
+                    const ts = entry.timestamp;
+                    const color = getMarkerColor(age);
+
+                    const icon = L.divIcon({
+                        className: 'custom-marker',
+                        html: '<div style="background:' + color + ';width:24px;height:24px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);"></div>',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12],
+                        popupAnchor: [0, -14]
+                    });
+
+                    const ageText = age != null ? (age < 1 ? 'Ahora mismo' : 'Hace ' + age + ' min') : 'Desconocido';
+                    const batteryText = battery != null ? battery + '%' : '?';
+                    const batteryClass = battery != null && battery > 20 ? 'battery-ok' : 'battery-low';
+
+                    const popupContent =
+                        '<strong>' + capitalize(name) + '</strong>' +
+                        '🕐 ' + ageText + '<br>' +
+                        '🔋 <span class="' + batteryClass + '">' + batteryText + '</span><br>' +
+                        '<a class="gmaps-link" href="' + mapsUrl + '" target="_blank">📍 Abrir en Google Maps</a>';
+
+                    if (markers[name]) {
+                        markers[name].setLatLng([lat, lon]);
+                        markers[name].setIcon(icon);
+                        markers[name].getPopup().setContent(popupContent);
+                    } else {
+                        const marker = L.marker([lat, lon], { icon: icon })
+                            .bindPopup(popupContent)
+                            .addTo(map);
+                        markers[name] = marker;
+                    }
+                }
+            } catch (e) {
+                console.error('Error fetching locations:', e);
+                statusText.textContent = 'Error de conexión';
+                led.className = 'led red';
+            }
+        }
+
+        // Cargar inmediatamente y luego cada 30 segundos
+        fetchLocations();
+        setInterval(fetchLocations, 30000);
+    </script>
+</body>
+</html>

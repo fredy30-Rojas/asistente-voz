@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Rastreador Familiar</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f4f8; }
+        .container { max-width: 400px; margin: 0 auto; padding: 24px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; }
+        .logo { font-size: 48px; margin-bottom: 12px; }
+        h1 { font-size: 24px; color: #1e293b; margin-bottom: 4px; text-align: center; }
+        .subtitle { font-size: 14px; color: #64748b; margin-bottom: 32px; text-align: center; }
+        .card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); width: 100%; }
+        label { display: block; font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 8px; }
+        input[type="text"] {
+            width: 100%; padding: 14px 16px; border: 2px solid #e2e8f0; border-radius: 12px;
+            font-size: 16px; margin-bottom: 20px; outline: none; transition: border-color 0.2s;
+        }
+        input[type="text"]:focus { border-color: #3b82f6; }
+        input[type="text"]:disabled { background: #f1f5f9; color: #94a3b8; }
+        .btn {
+            width: 100%; padding: 16px; border: none; border-radius: 12px; font-size: 18px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; color: white; display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn-start { background: #22c55e; }
+        .btn-start:hover { background: #16a34a; }
+        .btn-start:active { transform: scale(0.98); }
+        .btn-start:disabled { background: #94a3b8; cursor: not-allowed; }
+        .btn-stop { background: #ef4444; margin-top: 12px; }
+        .btn-stop:hover { background: #dc2626; }
+        .btn-stop:active { transform: scale(0.98); }
+        .status { margin-top: 20px; padding: 14px; border-radius: 12px; font-size: 14px; text-align: center; font-weight: 500; }
+        .status.active { background: #dcfce7; color: #16a34a; }
+        .status.error { background: #fef2f2; color: #dc2626; }
+        .status.loading { background: #f0f9ff; color: #0369a1; }
+        .footer { margin-top: 24px; font-size: 12px; color: #94a3b8; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📍</div>
+        <h1>Rastreador Familiar</h1>
+        <p class="subtitle">Comparte tu ubicación con Fredy</p>
+
+        <div class="card">
+            <label for="name">Tu nombre</label>
+            <input type="text" id="name" placeholder="Ej: Martha" autocomplete="off">
+
+            <button class="btn btn-start" id="btnStart" onclick="startTracking()">
+                ▶ Iniciar Rastreo
+            </button>
+            <button class="btn btn-stop" id="btnStop" onclick="stopTracking()" style="display:none;">
+                ⏹ Detener Rastreo
+            </button>
+
+            <div class="status loading" id="status" style="display:none;"></div>
+        </div>
+
+        <p class="footer">Tu ubicación se envía cada 5 minutos.<br>Solo Fredy puede ver dónde estás.</p>
+    </div>
+
+    <script>
+        const SERVER_URL = "https://34-173-169-64.nip.io";
+        const nameInput = document.getElementById('name');
+        const btnStart = document.getElementById('btnStart');
+        const btnStop = document.getElementById('btnStop');
+        const statusDiv = document.getElementById('status');
+
+        async function checkStatus() {
+            try {
+                const result = await GpsTracker.getStatus();
+                if (result.active) {
+                    nameInput.value = result.name || '';
+                    nameInput.disabled = true;
+                    btnStart.style.display = 'none';
+                    btnStop.style.display = 'block';
+                    showStatus('active', '✅ Rastreo activo - Enviando ubicación cada 5 minutos');
+                }
+            } catch (e) {
+                // Plugin no disponible en navegador - normal durante desarrollo
+                console.log('GpsTracker plugin no disponible:', e.message);
+            }
+        }
+
+        async function startTracking() {
+            const name = nameInput.value.trim();
+            if (!name) {
+                showStatus('error', '⚠ Escribe tu nombre primero');
+                return;
+            }
+
+            try {
+                showStatus('loading', '⏳ Iniciando GPS...');
+                const result = await GpsTracker.startTracking({
+                    name: name,
+                    serverUrl: SERVER_URL
+                });
+
+                if (result && result.success) {
+                    nameInput.disabled = true;
+                    btnStart.style.display = 'none';
+                    btnStop.style.display = 'block';
+                    showStatus('active', '✅ Rastreo activo - Enviando ubicación cada 5 minutos');
+                } else {
+                    showStatus('error', '❌ Error al iniciar el rastreo');
+                }
+            } catch (e) {
+                showStatus('error', '❌ Error: ' + (e.message || 'No se pudo iniciar el GPS'));
+                console.error(e);
+            }
+        }
+
+        async function stopTracking() {
+            try {
+                const result = await GpsTracker.stopTracking();
+                if (result && result.success) {
+                    nameInput.disabled = false;
+                    nameInput.value = '';
+                    btnStart.style.display = 'block';
+                    btnStop.style.display = 'none';
+                    showStatus('loading', '⏸ Rastreo detenido');
+                    setTimeout(() => { statusDiv.style.display = 'none'; }, 2000);
+                }
+            } catch (e) {
+                console.error('Error al detener rastreo:', e);
+            }
+        }
+
+        function showStatus(type, message) {
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'status ' + type;
+            statusDiv.textContent = message;
+        }
+
+        // Verificar estado al cargar
+        document.addEventListener('DOMContentLoaded', () => {
+            checkStatus();
+        });
+    </script>
+</body>
+</html>
