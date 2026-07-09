@@ -37,7 +37,7 @@ jobs:
 
       - name: Install npm dependencies
         working-directory: ${{ matrix.app }}
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Patch Capacitor AGP version (8.13.0 no existe)
         working-directory: ${{ matrix.app }}
@@ -102,7 +102,7 @@ jobs:
 
       - name: Install npm dependencies
         working-directory: family-tracker
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Sync Capacitor iOS
         working-directory: family-tracker
