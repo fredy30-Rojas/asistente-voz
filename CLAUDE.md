@@ -65,6 +65,41 @@ sed -i "s/com.android.tools.build:gradle:8.13.0/com.android.tools.build:gradle:8
   node_modules/@capacitor/android/capacitor/build.gradle
 ```
 
+## SOLUCIÓN: Compilar family-tracker en GitHub Actions (4 builds, 4 bugs)
+
+### Bugs encontrados y arreglados:
+
+1. **🔴 GitHub Push Protection bloquea API keys**
+   - Archivos: `family-tracker/server/bot_modified.js`, `family-tracker/server/web_server_modified.py`
+   - GitHub detectó CEREBRAS_KEY y GROQ_KEY en el código y rechazó el push
+   - Fix: Reemplazar keys por placeholders (`CEREBRAS_KEY_PLACEHOLDER`, `GROQ_KEY_PLACEHOLDER`) antes del commit
+   - Las keys reales solo existen en el servidor y en la PC local, NUNCA en GitHub
+
+2. **🔴 node_modules subido al repo (300,000 líneas)**
+   - `family-tracker/node_modules/` se incluyó en el commit porque no había .gitignore
+   - Esto rompe `npm ci` en Ubuntu porque el lock file referencia binarios de Windows
+   - Fix: `git rm -r --cached family-tracker/node_modules` + crear `.gitignore` con `node_modules/`
+
+3. **🔴 splash.xml duplicado con splash.png**
+   - Archivo: `family-tracker/android/app/src/main/res/drawable/splash.xml` (creado manualmente)
+   - Conflicto: el `splash.png` copiado de ai-coder-native choca con el xml
+   - Error: `Duplicate resources: drawable/splash`
+   - Fix: Eliminar `splash.xml` (el .png es el correcto)
+
+4. **🔴 npm ci falla cross-platform (Windows → Ubuntu)**
+   - `package-lock.json` generado en Windows contiene dependencias específicas de SO
+   - `npm ci` es estricto y falla si el lock file no coincide exactamente
+   - Fix: Cambiar `npm ci` por `npm install --no-audit --no-fund` en el workflow
+
+### Configuración final:
+```yaml
+- Java: 21 (Temurin)
+- SDK: platforms;android-36
+- Node: 20
+- npm: install (no ci) para compatibilidad Windows→Linux
+- Matrix: ai-coder-native + family-tracker
+```
+
 ## Control de dispositivos por voz
 
 La app ahora soporta comandos de voz para controlar TV, AC, equipo de sonido.
